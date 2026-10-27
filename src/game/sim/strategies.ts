@@ -1,7 +1,9 @@
-// テスト用の自動プレイ。バランスの確認（balance.test.ts）と、仕様書 11章の4つの遊び方に使う。
+// テスト用の自動プレイ。バランスの確認（balance.test.ts）と、仕様書 11.3.7 の遊び方に使う。
+// 結末の良し悪しは、ゲーム自身の結末（outcome.endingId）だけで測る。
 import { addAction, canAddAction, setMode } from "../actions";
-import { activeMembers, behind, contractors, recentReview } from "../derived";
-import { approvalScore, availability, hireAffordability } from "../escalation";
+import { BEHIND_ONTRACK } from "../balance";
+import { activeMembers, behind, contractors } from "../derived";
+import { availability } from "../escalation";
 import {
   chooseEvent, chooseMeeting, chooseRelease, chooseVendor, dropEscalation, endTurn, negotiateVendor, submitEscalation,
 } from "../flow";
@@ -11,7 +13,6 @@ import { createRng } from "../random";
 import type { Rng } from "../random";
 import { releaseOptions, remainingRatio } from "../release";
 import { createInitialState } from "../setup";
-import { budgetCoverage } from "../vendor";
 import type { EscalationType, EventId, GameState, Member } from "../types";
 
 export interface Strategy {
@@ -106,8 +107,20 @@ function coachTarget(s: GameState): { memberId: string; skill: "build" | "design
   return { memberId: m.id, skill };
 }
 
+// バランスの上申の選び方。残りターンと遅れを見て、選べる種類の中から決める（見送りなら null）
+function pickEscalation(s: GameState, types: EscalationType[]): EscalationType | null {
+  const can = (t: EscalationType) => types.includes(t) && availability(s, t).ok;
+  const rest = Math.max(0, s.deadline - s.turn);
+  const late = behind(s);
+  if (rest >= 6 && can("addStaff")) return "addStaff";
+  if (late >= 0.06 && !s.replanned && can("extendSchedule")) return "extendSchedule";
+  if (late >= 0.12 && can("cutScope")) return "cutScope";
+  if (rest >= 4 && late >= 0.06 && can("addStaff")) return "addStaff";
+  return null;
+}
+
 // バランス: 疲れたら休み、毎ターン何かしらチーム行動、序盤は育成、運用と2ターンおき、
-// ステコミ前に根回し、遅れたらリカバリ案で上申
+// ステコミ前に根回し、キックオフで増員を相談し、遅れたらリカバリ案で上申
 export const balanced: Strategy = {
   name: "balanced",
   plan: (s0) => {
@@ -125,54 +138,29 @@ export const balanced: Strategy = {
         if (low) s = tryAdd(s, { kind: "oneOnOne", memberId: low.id });
       }
     }
-    // 遅れていて裏付けがあるときは、その場で上申する
     return fillHandsOn(s);
   },
   // 会議のないターンでも、遅れが見えたらその場で相談する
-  turnEscalation: (s) => {
-    if (isMeetingTurn(s.turn) || s.turn < 7 || s.turn > 9 || behind(s) < 0.06) return null;
-    if (s.escalationCount === 0) return "cutScope";
-    return s.escalationCount === 1 && hireAffordability(s) !== "none" ? "addStaff" : null;
-  },
+  turnEscalation: (s) =>
+    isMeetingTurn(s.turn) || s.turn < 7 || s.turn > 10 || behind(s) < 0.06 ? null : pickEscalation(s, ["extendSchedule", "cutScope"]),
   meeting: (s) => {
-    if (s.turn === 2) return firstEnabled(s, ["kickoff_reestimate", "kickoff_ok"]);
-    if (behind(s) > 0.05) return firstEnabled(s, ["reestimate_report", "behind_recovery", "behind_honest"]);
+    if (s.turn === 2) return "kickoff_consult";
+    if (behind(s) > 0.05) return firstEnabled(s, ["behind_recovery", "behind_honest"]);
     return firstEnabled(s, ["onTrack_shared", "onTrack_plain"]);
   },
   event: (s, id) => {
     switch (id) {
       case "opsRequest": return behind(s) > 0.05 || s.turn >= 7 ? 1 : 0;
       case "vendorRateUp": return 1;
-      case "bossPullIn": return recentReview(s) ? 1 : 1;
+      case "bossPullIn": return 1;
       case "bigBug": return s.turn >= s.deadline - 1 ? 1 : 0;
       default: return 0;
     }
   },
-  escalation: (s, types) => {
-    const source = s.pending?.kind === "escalation" ? s.pending.source : "turn";
-    let best: { t: EscalationType; v: number } | null = null;
-    for (const t of types) {
-      if (!availability(s, t).ok) continue;
-      const rest = Math.max(0, s.deadline - s.turn);
-      const late = behind(s);
-      let value = approvalScore(s, t, "prepared", source).score;
-      const afford = hireAffordability(s);
-      if (t === "addStaff") value += (rest >= 3 ? 20 : -50) + (afford === "ok" ? 10 : afford === "tight" ? -10 : -60);
-      if (t === "addBudget" && afford !== "ok" && rest >= 3) value += 35;
-      if (t === "extendSchedule") value += late >= 0.15 && s.turn >= 8 ? 15 : -40;
-      if (t === "addBudget") value -= 30;
-      if (t === "cutScope") value += late >= 0.05 ? 15 : -25;
-      if (!best || value > best.v) best = { t, v: value };
-    }
-    return best ? best.t : null;
-  },
+  escalation: (s, types) => pickEscalation(s, types),
   vendor: (s) => {
-    const rest = Math.max(0, s.deadline - s.turn);
     const p = s.pending;
-    if (p?.kind !== "vendor" || rest < 3) return { negotiate: false, index: null };
-    // 払いきれる候補のうち、いちばん力のある人（候補は veteran, mid, junior の順）
-    const idx = [0, 1, 2].find((i) => budgetCoverage(s, p.candidates[i].member.ratePerTurn, p.conditional).enough);
-    return { negotiate: s.trust.vendor >= 50 && !p.negotiated, index: idx ?? null };
+    return { negotiate: p?.kind === "vendor" && s.trust.vendor >= 50 && !p.negotiated, index: 1 }; // 中堅（候補の2番目）
   },
   release: (s) => {
     const o = releaseOptions(s);
@@ -180,6 +168,64 @@ export const balanced: Strategy = {
     if (o.some((x) => x.id === "extend" && x.enabled) && remainingRatio(s) > 0.08) return "extend";
     return s.trust.ops >= 60 ? "defer" : "asis";
   },
+};
+
+// はじめての人: ふつうに気をつけるが、コツは知らない。人間の初回プレイの代わり
+export const firstTimer: Strategy = {
+  name: "firstTimer",
+  plan: (s0) => {
+    let s = setAllModes(s0, restAware);
+    if (s.turn >= 3 && s.turn - s.lastReviewTurn >= 2) s = tryAdd(s, { kind: "review" });
+    if (s.turnsSinceOpsSync >= 1) s = tryAdd(s, { kind: "opsSync" });
+    const low = [...activeMembers(s)].sort((a, b) => a.morale - b.morale)[0];
+    if (low && low.morale < 50) s = tryAdd(s, { kind: "oneOnOne", memberId: low.id });
+    return fillHandsOn(s);
+  },
+  meeting: (s) => {
+    if (s.turn === 2) return "kickoff_consult";
+    if (behind(s) > BEHIND_ONTRACK) return firstEnabled(s, ["behind_recovery", "behind_honest"]);
+    return "onTrack_plain";
+  },
+  event: (_s, id) => (id === "opsRequest" ? 1 : 0), // 追加要望は「次の改善で」、ほかは最初の選択肢
+  escalation: (s, types) => {
+    const can = types.filter((t) => availability(s, t).ok);
+    const pick = (t: EscalationType) => can.includes(t);
+    if (s.turn <= 2 && pick("addStaff")) return "addStaff";
+    if (!s.replanned && pick("extendSchedule")) return "extendSchedule";
+    if (behind(s) > 0.05 && pick("cutScope")) return "cutScope";
+    return can[0] ?? null;
+  },
+  vendor: () => ({ negotiate: false, index: 1 }), // 値下げ相談はせず、中堅を採用
+  release: (s) => {
+    const o = releaseOptions(s);
+    if (o.some((x) => x.id === "auto")) return "auto";
+    if (o.some((x) => x.id === "extend" && x.enabled) && remainingRatio(s) > 0.1) return "extend";
+    return "defer";
+  },
+};
+
+// 自動リリースか、一部あとまわし
+const releaseWithoutExtension = (s: GameState): "auto" | "defer" => (releaseOptions(s).some((x) => x.id === "auto") ? "auto" : "defer");
+
+// はじめての人と同じ行動で、上申だけしない
+export const firstTimerNoEscalation: Strategy = {
+  ...firstTimer,
+  name: "firstTimerNoEscalation",
+  meeting: (s) => {
+    if (s.turn === 2) return "kickoff_ok";
+    if (behind(s) > BEHIND_ONTRACK) return "behind_honest";
+    return "onTrack_plain";
+  },
+  escalation: () => null,
+  release: releaseWithoutExtension,
+};
+
+// はじめての人で、増員はキックオフの相談だけ（増員それだけの価値を測る）
+export const firstTimerHireOnly: Strategy = {
+  ...firstTimer,
+  name: "firstTimerHireOnly",
+  meeting: (s) => firstEnabled(s, ["kickoff_consult", "behind_honest", "onTrack_plain"]),
+  release: releaseWithoutExtension,
 };
 
 // バランスから根回しと上申（キックオフの相談も含む）を抜いたもの。上申が効いていることの確認用
@@ -204,6 +250,7 @@ export const balancedNoEscalation: Strategy = {
   },
   escalation: () => null,
   turnEscalation: () => null,
+  release: (s) => (releaseOptions(s).some((x) => x.id === "auto") ? "auto" : s.trust.ops >= 60 ? "defer" : "asis"),
 };
 
 // 毎ターンレビューするが、根回しも上申もしない（レビューだけで全部解決できないことの確認用）
@@ -220,7 +267,8 @@ export const reviewEveryTurnNoEscalation: Strategy = {
 };
 
 export const STRATEGIES: Record<string, Strategy> = {
-  careless, passive, mixed, balanced, balancedNoEscalation, reviewEveryTurnNoEscalation,
+  careless, passive, mixed, firstTimer, firstTimerNoEscalation, firstTimerHireOnly,
+  balanced, balancedNoEscalation, reviewEveryTurnNoEscalation,
 };
 
 // 最後まで自動プレイする。同じ seed と戦略なら結果は同じ
@@ -275,19 +323,4 @@ export function playGame(seed: number, strategy: Strategy): GameState {
   }
   if (s.status !== "finished") throw new Error("game did not finish");
   return s;
-}
-
-// 仕様書 11.2 の「良い結末」
-export function isGoodOutcome(s: GameState): boolean {
-  const o = s.outcome;
-  if (!o || o.canceled) return false;
-  return (
-    o.finalQuality >= 65 && unfinishedRatio(s) <= 0.05 && o.grades.scope !== "bad" && !o.incident && s.departures === 0 &&
-    o.releaseTurn - 12 <= 1 && !s.overBudget && s.trust.steering >= 50 && s.trust.ops >= 50
-  );
-}
-
-// 合意した範囲（上申で減らした分は除く）のうち、できていない割合
-export function unfinishedRatio(s: GameState): number {
-  return Math.max(0, 1 - Math.min(1, s.doneWork / Math.max(1, s.totalWork)));
 }
