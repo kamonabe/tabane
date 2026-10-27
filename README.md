@@ -7,3 +7,16 @@
 - 1プレイ: 30分くらい
 
 設計の詳細は [docs/design.md](docs/design.md) を見てください。
+
+## 開発
+
+Node.js 22 以上が必要です。
+
+```sh
+npm install
+npm run dev        # 開発サーバ（http://localhost:5173）
+npm test           # テスト
+npm run build      # 本番用ビルド（dist/）
+```
+
+このリポジトリは公開されています。API キーやパスワードなどの秘密情報はコミットしないでください（`.env` は `.gitignore` で除外しています）。
