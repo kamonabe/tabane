@@ -62,6 +62,13 @@ export function contractors(s: GameState): Member[] {
   return s.members.filter((m) => !m.left && m.employment === "contractor");
 }
 
+// 今いる外注さんの分を払い終えたあとの、自由に使える予算（締切まで）
+export function freeBudget(s: GameState): number {
+  const rest = Math.max(0, s.deadline - s.turn);
+  const burn = contractors(s).reduce((a, m) => a + (m.leavesAfterTurn !== null ? Math.min(rest, Math.max(0, m.leavesAfterTurn - s.turn)) : rest) * m.ratePerTurn, 0);
+  return s.budget - burn;
+}
+
 export function avg(values: number[]): number {
   return values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length;
 }

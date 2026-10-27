@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { addAction, setMode } from "./actions";
+import { REVIEW_REVEAL_FRAC, REVIEW_REVEAL_MAX, REVIEW_WASTE_MULT, WASTE_BIAS } from "./balance";
 import { reportedDone } from "./derived";
 import { nextTurn, resolveTurn } from "./turn";
 import { baseState, member, rng } from "./testUtils";
 import { randomInt } from "./random";
 import type { GameState, LeaderAction } from "./types";
 
+const W = WASTE_BIAS.normal;
 const withPlan = (s: GameState, ...plan: LeaderAction[]): GameState => ({ ...s, plan, apUsed: plan.length });
 
 describe("resolveTurn の順序", () => {
@@ -15,14 +17,14 @@ describe("resolveTurn の順序", () => {
     expect(r.members[0].skills.design).toBe(4);
     // 育成された人は出力半分、士気+3 は出力計算の前
     const coached = 5 * (0.7 + 63 / 200) * 0.5;
-    expect(r.doneWork).toBeCloseTo((coached + 4) * 0.88);
+    expect(r.doneWork).toBeCloseTo((coached + 4) * (1 - W));
   });
 
   it("レビューの公開は、その回の申告ずれが生まれたあと", () => {
     const s = withPlan({ ...baseState(), hiddenGap: 20 }, { kind: "review" });
     const r = resolveTurn(s);
-    const waste = 8 * 0.12 * 0.5;
-    expect(r.hiddenGap).toBeCloseTo(20 + waste - 15);
+    const total = 20 + 8 * W * REVIEW_WASTE_MULT;
+    expect(r.hiddenGap).toBeCloseTo(total - Math.min(total * REVIEW_REVEAL_FRAC, REVIEW_REVEAL_MAX));
     expect(r.lastReviewTurn).toBe(5);
   });
 
@@ -48,18 +50,20 @@ describe("申告のずれ", () => {
     const b = resolveTurn(withPlan(team("optimistic"), { kind: "oneOnOne", memberId: "a" }));
     expect(a.hiddenGap).toBeLessThan(b.hiddenGap);
   });
-  it("レビューがあるとずれの発生が半分", () => {
+  it("レビューがあるとずれの発生が減り、見つかったずれの一部だけが公開される", () => {
     const base = { ...baseState(), hiddenGap: 20 };
     const a = resolveTurn(withPlan(base, { kind: "oneOnOne", memberId: "m1" }));
     const b = resolveTurn(withPlan(base, { kind: "review" }));
-    expect(a.hiddenGap - 20).toBeCloseTo(8 * 0.12);
-    expect(b.hiddenGap - 5).toBeCloseTo((a.hiddenGap - 20) / 2);
+    expect(a.hiddenGap - 20).toBeCloseTo(8 * W);
+    const total = 20 + (a.hiddenGap - 20) * REVIEW_WASTE_MULT;
+    expect(b.hiddenGap).toBeCloseTo(total - Math.min(total * REVIEW_REVEAL_FRAC, REVIEW_REVEAL_MAX));
+    expect(b.hiddenGap).toBeGreaterThan(0); // 一度のレビューでは全部は見えない
   });
   it("チーム行動がないと ×1.25 で、全員の士気 −3", () => {
     const a = resolveTurn(withPlan(baseState(), { kind: "handsOn" }));
     const b = resolveTurn(withPlan(baseState(), { kind: "opsSync" }, { kind: "oneOnOne", memberId: "m2" }));
-    expect(a.hiddenGap).toBeCloseTo(8 * 0.12 * 1.25);
-    expect(b.hiddenGap).toBeCloseTo(8 * 0.12);
+    expect(a.hiddenGap).toBeCloseTo(8 * W * 1.25);
+    expect(b.hiddenGap).toBeCloseTo(8 * W);
     expect(a.members[0].morale).toBe(57);
     expect(b.members[0].morale).toBe(60);
   });

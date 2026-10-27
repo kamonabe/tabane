@@ -4,7 +4,7 @@ import {
   NEGLECT_OPS_TRUST, NEGLECT_OPS_TURNS, NEGLECT_VENDOR_TRUST, NEGLECT_VENDOR_TURNS, NO_TEAM_ACTION_MORALE,
   NO_TEAM_ACTION_WASTE_MULT, OPS_SYNC_CLARITY_EARLY, OPS_SYNC_CLARITY_LATE, OPS_SYNC_TRUST, NEMAWASHI_TRUST,
   OVER_BUDGET_TRUST, OVERFLOW_TO_QUALITY, OVERFLOW_TO_WORK, PUSH_DEBT, PUSH_QUALITY, PUSH_WASTE_MULT,
-  REVIEW_DEBT, REVIEW_QUALITY, REVIEW_REVEAL_MAX, REVIEW_WASTE_MULT, SECRET_NEWS_MORALE, TEST_AUTO_REVEAL,
+  REVIEW_DEBT, REVIEW_QUALITY, REVIEW_REVEAL_FRAC, REVIEW_REVEAL_MAX, REVIEW_WASTE_MULT, SECRET_NEWS_MORALE, TEST_AUTO_REVEAL,
   VENDOR_TALK_TRUST, WASTE_BIAS, COACH_MORALE, ONE_ON_ONE_FATIGUE, ONE_ON_ONE_MORALE,
 } from "./balance";
 import { computeApMax } from "./actions";
@@ -99,9 +99,9 @@ export function resolveTurn(state: GameState): GameState {
   // 5. レビューの公開（申告ずれが生まれたあと）
   if (hasReview) {
     s.lastReviewTurn = s.turn;
-    const revealed = Math.min(s.hiddenGap, REVIEW_REVEAL_MAX);
-    s.hiddenGap -= revealed;
-    if (revealed >= GAP_LOG_THRESHOLD) {
+    const found = s.hiddenGap; // レビューで見つかったずれ。見えるのは一部だけで、残りは次のレビューやテストまで残る
+    s.hiddenGap -= Math.min(found * REVIEW_REVEAL_FRAC, REVIEW_REVEAL_MAX);
+    if (found >= GAP_LOG_THRESHOLD) {
       addLogFirstImportant(s, "gapRevealed", "レビューで、申告より実際の進みが遅れていたことが分かった");
     }
   }

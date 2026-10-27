@@ -109,7 +109,7 @@ function generate(rng: Rng, seed: number, force: boolean): GameState {
       size, uncertainty, opsImpact, novelty, durationMonths,
       weeksPerTurn: (durationMonths / 3) as 1 | 2 | 3 | 4,
       deadlineFirm,
-      difficultyLabel: difficulty < 1.25 ? "easy" : difficulty < 1.4 ? "normal" : "hard",
+      difficultyLabel: difficulty < 1.3 ? "easy" : difficulty < 1.5 ? "normal" : "hard",
     },
     members,
     totalWork, originalTotalWork: totalWork, doneWork: 0, hiddenGap: 0, estimateBias,

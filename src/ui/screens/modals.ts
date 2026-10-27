@@ -5,7 +5,8 @@ import { approvalScore, availability, ESCALATION_LABEL, ESCALATION_TYPES, effect
 import { eventChoiceEnabled, eventTarget } from "../../game/events";
 import { meetingOptions } from "../../game/meetings";
 import { releaseOptions, remainingRatio } from "../../game/release";
-import type { EscalationSource, EscalationStyle, EscalationType } from "../../game/types";
+import { budgetCoverage } from "../../game/vendor";
+import type { EscalationSource, EscalationStyle, EscalationType, GameState } from "../../game/types";
 import { EVENT_TEXT } from "../../text/events";
 import { choiceButton, modal } from "../components/modal";
 import { ARCHETYPE_LABEL, EMPLOYMENT_LABEL, skillRow, TRAIT_LABEL } from "../components/memberCard";
@@ -163,6 +164,17 @@ function escalationModal(c: ScreenContext, source: EscalationSource, types: Esca
   );
 }
 
+function coverageEl(s: GameState, rate: number, conditional: boolean): HTMLElement {
+  const v = budgetCoverage(s, rate, conditional);
+  return h(
+    "p",
+    { class: v.enough ? "note" : "note note-warn" },
+    v.enough
+      ? `いまの予算の空きで約${v.covers}ターン分（払うのは${v.payTurns}ターン）`
+      : `いまの予算の空きは約${v.covers}ターン分。${v.payTurns}ターン払うには足りないかも`,
+  );
+}
+
 function vendorModal(c: ScreenContext): HTMLElement {
   const s = c.game;
   const p = s.pending;
@@ -173,6 +185,7 @@ function vendorModal(c: ScreenContext): HTMLElement {
     [
       say("営業さん「ちょうど空いている人が3人います。どの方にしましょう？」"),
       p.conditional ? h("p", { class: "note" }, "条件付きなので、契約は3ターンです。") : null,
+      h("p", { class: "note" }, "このゲームの外注さんは「派遣」のイメージで、リーダーが直接お願いできます。（現実の「業務委託」だと、お願いは相手の会社を通します）"),
       h(
         "div",
         { class: "candidates" },
@@ -184,6 +197,7 @@ function vendorModal(c: ScreenContext): HTMLElement {
             h("header", { class: "member-head" }, portraitEl(m.portraitId, "normal", "md"), h("div", { class: "member-id" }, h("strong", null, m.name), h("span", { class: "badge badge-contractor" }, EMPLOYMENT_LABEL.contractor), h("span", { class: "badge badge-plain" }, ARCHETYPE_LABEL[m.archetype] + (m.archetype === "junior" ? "（育てがいあり）" : "")))),
             skillRow(m),
             h("p", { class: "rate" }, t("{tanka}"), `：${m.ratePerTurn} 万円／ターン`),
+            coverageEl(s, m.ratePerTurn, p.conditional),
             h("p", { class: "note" }, `申告のくせ：${m.traitRevealed ? TRAIT_LABEL[m.trait] : "会ってみないと分からない"}`),
             h("button", { class: "button button-small", type: "button", onClick: () => c.dispatch({ type: "vendorHire", index: i }) }, "この人にお願いする"),
           );

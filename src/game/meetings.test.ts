@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BEHIND_ONTRACK } from "./balance";
 import { applyMeetingChoice, enterMeeting, meetingOptions } from "./meetings";
 import { baseState } from "./testUtils";
 import type { GameState } from "./types";
@@ -12,9 +13,10 @@ const at6 = (done: number, over: Partial<GameState> = {}): GameState => {
 const ids = (s: GameState) => meetingOptions(s).map((o) => o.id);
 
 describe("meetings", () => {
-  it("behind の境目 0.05 で選択肢が切り替わる", () => {
-    expect(ids(at6(20))).toEqual(["onTrack_plain", "onTrack_shared"]); // 0.25-0.20=0.05
-    expect(ids(at6(19))).toEqual(["behind_honest", "behind_recovery", "behind_gloss"]);
+  it("behind の境目 BEHIND_ONTRACK（0.02）で選択肢が切り替わる", () => {
+    expect(BEHIND_ONTRACK).toBe(0.02);
+    expect(ids(at6(23))).toEqual(["onTrack_plain", "onTrack_shared"]); // 0.25-0.23=0.02
+    expect(ids(at6(22))).toEqual(["behind_honest", "behind_recovery", "behind_gloss"]);
   });
   it("リカバリ案はレビュー直近か根回しが条件", () => {
     const find = (s: GameState) => meetingOptions(s).find((o) => o.id === "behind_recovery")!;

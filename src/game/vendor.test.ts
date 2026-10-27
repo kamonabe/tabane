@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hireCandidate, makeCandidates, negotiateRate, openVendorModal } from "./vendor";
+import { budgetCoverage, hireCandidate, makeCandidates, negotiateRate, openVendorModal } from "./vendor";
 import { baseState, fixedRng, rng } from "./testUtils";
 
 const open = (conditional: boolean) => {
@@ -43,5 +43,12 @@ describe("vendor", () => {
     expect(a.pending).toBeNull();
     const b = hireCandidate(open(true), 0);
     expect(b.members[b.members.length - 1].leavesAfterTurn).toBe(7);
+  });
+  it("予算で何ターン払えるかを数える（今いる外注さんの分は除く）", () => {
+    const s = baseState({ turn: 4, deadline: 12, budget: 400 });
+    expect(budgetCoverage(s, 90, false)).toEqual({ covers: 4, payTurns: 8, enough: false });
+    expect(budgetCoverage(s, 90, true)).toEqual({ covers: 4, payTurns: 3, enough: true });
+    const c = { ...s, members: [{ ...s.members[0], employment: "contractor" as const, ratePerTurn: 20 }] };
+    expect(budgetCoverage(c, 90, true).covers).toBe(2); // 400 − 20×8 = 240
   });
 });

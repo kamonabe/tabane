@@ -1,7 +1,7 @@
 // テスト用の自動プレイ。バランスの確認（balance.test.ts）と、仕様書 11章の4つの遊び方に使う。
 import { addAction, canAddAction, setMode } from "../actions";
 import { activeMembers, behind, contractors, recentReview } from "../derived";
-import { approvalScore, availability } from "../escalation";
+import { approvalScore, availability, hireAffordability } from "../escalation";
 import {
   chooseEvent, chooseMeeting, chooseRelease, chooseVendor, dropEscalation, endTurn, negotiateVendor, submitEscalation,
 } from "../flow";
@@ -11,11 +11,13 @@ import { createRng } from "../random";
 import type { Rng } from "../random";
 import { releaseOptions, remainingRatio } from "../release";
 import { createInitialState } from "../setup";
+import { budgetCoverage } from "../vendor";
 import type { EscalationType, EventId, GameState, Member } from "../types";
 
 export interface Strategy {
   name: string;
   plan(s: GameState): GameState; // ターン中の働き方と行動を決める
+  turnEscalation?(s: GameState): EscalationType | null; // ターン画面から上申するなら、その種類（plan の前に呼ぶ）
   meeting(s: GameState): string;
   event(s: GameState, eventId: EventId): number;
   escalation(s: GameState, types: EscalationType[]): EscalationType | null;
@@ -126,6 +128,12 @@ export const balanced: Strategy = {
     // 遅れていて裏付けがあるときは、その場で上申する
     return fillHandsOn(s);
   },
+  // 会議のないターンでも、遅れが見えたらその場で相談する
+  turnEscalation: (s) => {
+    if (isMeetingTurn(s.turn) || s.turn < 7 || s.turn > 9 || behind(s) < 0.06) return null;
+    if (s.escalationCount === 0) return "cutScope";
+    return s.escalationCount === 1 && hireAffordability(s) !== "none" ? "addStaff" : null;
+  },
   meeting: (s) => {
     if (s.turn === 2) return firstEnabled(s, ["kickoff_reestimate", "kickoff_ok"]);
     if (behind(s) > 0.05) return firstEnabled(s, ["reestimate_report", "behind_recovery", "behind_honest"]);
@@ -146,20 +154,25 @@ export const balanced: Strategy = {
     for (const t of types) {
       if (!availability(s, t).ok) continue;
       const rest = Math.max(0, s.deadline - s.turn);
-      const need = remainingRatio(s);
       const late = behind(s);
       let value = approvalScore(s, t, "prepared", source).score;
-      if (t === "addStaff") value += (rest >= 3 ? 20 : -50) + (s.budget > 100 * rest ? 10 : -20);
+      const afford = hireAffordability(s);
+      if (t === "addStaff") value += (rest >= 3 ? 20 : -50) + (afford === "ok" ? 10 : afford === "tight" ? -10 : -60);
+      if (t === "addBudget" && afford !== "ok" && rest >= 3) value += 35;
       if (t === "extendSchedule") value += late >= 0.15 && s.turn >= 8 ? 15 : -40;
       if (t === "addBudget") value -= 30;
-      if (t === "cutScope") value -= need > 0.3 && late >= 0.15 ? 0 : 25;
+      if (t === "cutScope") value += late >= 0.05 ? 15 : -25;
       if (!best || value > best.v) best = { t, v: value };
     }
     return best ? best.t : null;
   },
   vendor: (s) => {
     const rest = Math.max(0, s.deadline - s.turn);
-    return { negotiate: s.trust.vendor >= 50, index: rest >= 3 ? 1 : null };
+    const p = s.pending;
+    if (p?.kind !== "vendor" || rest < 3) return { negotiate: false, index: null };
+    // 払いきれる候補のうち、いちばん力のある人（候補は veteran, mid, junior の順）
+    const idx = [0, 1, 2].find((i) => budgetCoverage(s, p.candidates[i].member.ratePerTurn, p.conditional).enough);
+    return { negotiate: s.trust.vendor >= 50 && !p.negotiated, index: idx ?? null };
   },
   release: (s) => {
     const o = releaseOptions(s);
@@ -169,7 +182,46 @@ export const balanced: Strategy = {
   },
 };
 
-export const STRATEGIES: Record<string, Strategy> = { careless, passive, mixed, balanced };
+// バランスから根回しと上申（キックオフの相談も含む）を抜いたもの。上申が効いていることの確認用
+export const balancedNoEscalation: Strategy = {
+  ...balanced,
+  name: "balancedNoEscalation",
+  plan: (s0) => {
+    const planned = balanced.plan(s0);
+    // 根回しだけ外した計画を作り直す（AP は手を動かすで埋める）
+    let s = s0;
+    for (const m of activeMembers(s0)) s = setMode(s, m.id, restAware(m));
+    for (const a of planned.plan) {
+      if (a.kind === "nemawashi" || a.kind === "handsOn") continue;
+      s = tryAdd(s, a);
+    }
+    return fillHandsOn(s);
+  },
+  meeting: (s) => {
+    if (s.turn === 2) return "kickoff_ok";
+    if (behind(s) > 0.05) return firstEnabled(s, ["behind_honest"]);
+    return firstEnabled(s, ["onTrack_shared", "onTrack_plain"]);
+  },
+  escalation: () => null,
+  turnEscalation: () => null,
+};
+
+// 毎ターンレビューするが、根回しも上申もしない（レビューだけで全部解決できないことの確認用）
+export const reviewEveryTurnNoEscalation: Strategy = {
+  ...balancedNoEscalation,
+  name: "reviewEveryTurnNoEscalation",
+  plan: (s0) => {
+    let s = s0;
+    for (const m of activeMembers(s0)) s = setMode(s, m.id, restAware(m));
+    if (s.turn >= 3) s = tryAdd(s, { kind: "review" });
+    if (s.turnsSinceOpsSync >= 1 || s.turn <= 4) s = tryAdd(s, { kind: "opsSync" });
+    return fillHandsOn(s);
+  },
+};
+
+export const STRATEGIES: Record<string, Strategy> = {
+  careless, passive, mixed, balanced, balancedNoEscalation, reviewEveryTurnNoEscalation,
+};
 
 // 最後まで自動プレイする。同じ seed と戦略なら結果は同じ
 export function playGame(seed: number, strategy: Strategy): GameState {
@@ -179,6 +231,17 @@ export function playGame(seed: number, strategy: Strategy): GameState {
     const p = s.pending;
     if (!p) {
       if (s.status !== "playing") throw new Error(`stuck: status=${s.status}`);
+      if (!s.escalatedThisTurn && strategy.turnEscalation) {
+        const t = strategy.turnEscalation(s);
+        if (t && availability(s, t).ok) {
+          const next = submitEscalation(s, t, "prepared", rng);
+          if (next !== s) {
+            s = next;
+            continue;
+          }
+        }
+        s = { ...s, escalatedThisTurn: true }; // このターンは見送り（次のターンで nextTurn が戻す）
+      }
       s = endTurn(strategy.plan(s), rng);
       continue;
     }
@@ -219,11 +282,12 @@ export function isGoodOutcome(s: GameState): boolean {
   const o = s.outcome;
   if (!o || o.canceled) return false;
   return (
-    o.finalQuality >= 65 && unfinishedRatio(s) <= 0.05 && !o.incident && s.departures === 0 &&
+    o.finalQuality >= 65 && unfinishedRatio(s) <= 0.05 && o.grades.scope !== "bad" && !o.incident && s.departures === 0 &&
     o.releaseTurn - 12 <= 1 && !s.overBudget && s.trust.steering >= 50 && s.trust.ops >= 50
   );
 }
 
+// 合意した範囲（上申で減らした分は除く）のうち、できていない割合
 export function unfinishedRatio(s: GameState): number {
-  return Math.max(0, 1 - Math.min(1, s.doneWork / Math.max(1, s.originalTotalWork)));
+  return Math.max(0, 1 - Math.min(1, s.doneWork / Math.max(1, s.totalWork)));
 }

@@ -1,6 +1,6 @@
 // 外注会社との交渉（仕様書 6.4）
 import { CONTRACT_TURNS, HIRE_START, VENDOR_RATES } from "./balance";
-import { clamp, setTrust } from "./derived";
+import { clamp, freeBudget, setTrust } from "./derived";
 import { createMember, makeSkills, nextMemberId, pickName, pickTrait } from "./members";
 import { chance, randomInt } from "./random";
 import type { Rng } from "./random";
@@ -74,4 +74,12 @@ export function skipVendor(state: GameState): GameState {
   s.pending = null;
   s.lastResult = "今回は見送りました。";
   return s;
+}
+
+// 候補を雇ったとき、今いる外注さんの分を除いた予算で何ターン払えるか（payTurns = 払う予定のターン数）
+export function budgetCoverage(s: GameState, ratePerTurn: number, conditional: boolean): { covers: number; payTurns: number; enough: boolean } {
+  const rest = Math.max(0, s.deadline - s.turn);
+  const payTurns = conditional ? Math.min(CONTRACT_TURNS, rest) : rest;
+  const covers = Math.floor(freeBudget(s) / Math.max(1, ratePerTurn));
+  return { covers, payTurns, enough: covers >= payTurns };
 }

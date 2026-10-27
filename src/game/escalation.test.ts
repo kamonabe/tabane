@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyEscalation, approvalScore, escalate, outcomeOf } from "./escalation";
-import { baseState, fixedRng } from "./testUtils";
+import { applyEscalation, approvalScore, escalate, hireAffordability, outcomeOf } from "./escalation";
+import { baseState, fixedRng, member } from "./testUtils";
 import type { EscalationSource, EscalationStyle, EscalationType, GameState } from "./types";
 
 const score = (s: GameState, type: EscalationType = "addStaff", style: EscalationStyle = "quick", source: EscalationSource = "turn") =>
@@ -27,7 +27,8 @@ describe("approvalScore", () => {
     const firm = s5();
     firm.profile.deadlineFirm = true;
     expect(score(firm, "extendSchedule")).toBe(45);
-    expect(score({ ...s5(), budget: 100 })).toBe(55);
+    expect(score({ ...s5(), budget: 500 })).toBe(55); // 余裕はないが期間限定ならなんとか（−15）
+    expect(score({ ...s5(), budget: 100 })).toBe(20); // 払えない（−50）
   });
   it("裏付け: 順調と言っていたのに遅れていないと −10", () => {
     expect(score({ ...s5(), doneWork: 50 })).toBe(50);
@@ -76,6 +77,22 @@ describe("結果", () => {
   it("人を増やす承認は外注交渉を開く（条件付きは若手・中堅のみ）", () => {
     const s = escalate(s5(), "addStaff", "prepared", fixedRng(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5));
     expect(s.pending?.kind).toBe("vendor");
+  });
+  it("予算が払えない人増やしは通らない。きびしいときは満額でも期間限定", () => {
+    const rich = hireAffordability({ ...s5(), turn: 5, deadline: 12, budget: 1000 });
+    expect(rich).toBe("ok");
+    expect(hireAffordability({ ...s5(), budget: 500 })).toBe("tight"); // 残り7ターン × 65 = 455 は払えるが 700 は無理
+    expect(hireAffordability({ ...s5(), budget: 100 })).toBe("none");
+    // 今いる外注さんの分は先に引かれる
+    const withC = { ...s5(), budget: 800, members: [member("c", { employment: "contractor", ratePerTurn: 100 })] };
+    expect(hireAffordability(withC)).toBe("none");
+    const full = escalate({ ...s5(), budget: 500 }, "addStaff", "prepared", fixedRng(0.99, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5));
+    expect(full.escalations[0].outcome).toBe("conditional");
+    expect(full.pending).toMatchObject({ kind: "vendor", conditional: true });
+    const none = escalate({ ...s5(), budget: 100 }, "addStaff", "prepared", fixedRng(0.99));
+    expect(none.escalations[0].outcome).toBe("rejected");
+    expect(none.pending).toBeNull();
+    expect(none.lastResult).toContain("予算");
   });
   it("範囲を減らしても reportedDone は下回らない。承認 −15%、条件付き −8%", () => {
     const s = { ...s5(), totalWork: 100, originalTotalWork: 100, doneWork: 90 };

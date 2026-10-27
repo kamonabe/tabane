@@ -1,3 +1,4 @@
+import { DIFFICULTY_CAP } from "./balance";
 import { describe, expect, it } from "vitest";
 import { createInitialState, checkSetup, difficultyOf, validateSetup } from "./setup";
 
@@ -38,7 +39,7 @@ describe("createInitialState", () => {
       expect(s.trust.vendor).toBe(50);
       expect(validateSetup(s)).toBe(true);
       expect(checkSetup(s)).toEqual({ hasBuilder: true, hasCoordinator: true, slackOk: true, difficultyOk: true });
-      expect(difficultyOf(s)).toBeLessThanOrEqual(1.51);
+      expect(difficultyOf(s)).toBeLessThanOrEqual(DIFFICULTY_CAP + 0.01);
     }
   });
 });

@@ -35,12 +35,13 @@ export const OVERFLOW_TO_WORK = 0.5;
 export const OVERFLOW_TO_QUALITY = 0.25;
 
 // 申告のずれ
-export const WASTE_BIAS: Record<Trait, number> = { careful: 0.05, normal: 0.12, optimistic: 0.22 };
+export const WASTE_BIAS: Record<Trait, number> = { careful: 0.08, normal: 0.18, optimistic: 0.3 };
 export const NO_TEAM_ACTION_WASTE_MULT = 1.25;
-export const REVIEW_WASTE_MULT = 0.5;
+export const REVIEW_WASTE_MULT = 0.8;
 export const REVIEW_REVEAL_MAX = 15;
+export const REVIEW_REVEAL_FRAC = 0.5; // レビューで見える申告ずれの割合（残りは次のレビューやテストまで残る）
 export const TEST_AUTO_REVEAL = 0.4;
-export const GAP_LOG_THRESHOLD = 5;
+export const GAP_LOG_THRESHOLD = 6;
 
 // 行動
 export const HANDS_ON_MAX = 2;
@@ -91,11 +92,13 @@ export const GUIDE_FAIR = 55;
 
 // ベンダ（6.4）
 export const VENDOR_RATES = { veteran: [120, 140], mid: [90, 110], junior: [65, 80] } as const;
+export const HIRE_COMFORT_RATE = 100; // 残りターン × これ以上の予算があれば、人を増やしても安心
+export const HIRE_MIN_RATE = 65; // いちばん安い候補の単価の目安
 export const HIRE_START = { morale: 60, fatigue: 10 };
 export const HELPER_TURNS = 2;
 
 // ステコミ（7.1）
-export const BEHIND_ONTRACK = 0.05;
+export const BEHIND_ONTRACK = 0.02;
 export const BEHIND_GLOSS_REVEAL = 0.1;
 export const GLOSS_PENALTY = 12;
 export const CANCEL_STEERING = 10;
@@ -126,12 +129,13 @@ export const GRADE_DELIVERY = [0, 1, 2] as const; // 以下
 export const GRADE_SCOPE = [0.95, 0.85, 0.7] as const;
 export const GRADE_STAKEHOLDERS = [70, 55, 40] as const;
 export const GRADE_TEAM = [65, 50, 35] as const;
+export const BURNOUT_FATIGUE = 65; // 離脱がなくても、平均疲労がこれ以上なら「燃え尽き」
 
 // 初期生成（3章）
 export const SETUP_MAX_TRIES = 20;
-export const RATIO_MIN = 1.05;
-export const RATIO_SPREAD = 0.3;
-export const DIFFICULTY_CAP = 1.5;
+export const RATIO_MIN = 1.25; // 仕様書は 1.15。隠れた手戻りを増やしたぶん、名目能力に対する総作業量を重くした
+export const RATIO_SPREAD = 0.22;
+export const DIFFICULTY_CAP = 1.7;
 export const CAPACITY_FACTOR = 0.9;
 export const SLACK_RANGE = [150, 400] as const;
 export const SLACK_MIN_FOR_HIGH_RATIO = 250;
