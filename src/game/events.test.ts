@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EVENT_DEFS, EVENT_IDS, applyEventChoice, eventChoiceEnabled, rollEvent, sickChance, startEvent } from "./events";
+import { EVENT_DEFS, EVENT_IDS, applyEventChoice, eventChoiceEnabled, rollEvent, sickChance, startEvent, vendorEventTargets } from "./events";
 import { baseState, fixedRng, member, rng } from "./testUtils";
 import type { EventId, GameState } from "./types";
 
@@ -14,7 +14,7 @@ const open = (s: GameState, eventId: EventId, targetId: string | null = null): G
 describe("イベントの条件", () => {
   it("ターン範囲・上限・一度きり", () => {
     const s = baseState({ clarity: 50 });
-    expect([w("opsRequest", { ...s, turn: 2 }), w("opsRequest", { ...s, turn: 3 }), w("opsRequest", { ...s, turn: 10 })]).toEqual([0, 4, 0]);
+    expect([w("opsRequest", { ...s, turn: 2 }), w("opsRequest", { ...s, turn: 3 }), w("opsRequest", { ...s, turn: 11 }), w("opsRequest", { ...s, turn: 12 })]).toEqual([0, 4, 4, 0]);
     expect(w("opsRequest", { ...s, turn: 4, eventCounts: { opsRequest: 3 } })).toBe(0);
     expect(w("reqRework", { ...s, turn: 5 })).toBe(5);
     expect(w("reqRework", { ...s, turn: 5, clarity: 90 })).toBe(0);
@@ -22,12 +22,12 @@ describe("イベントの条件", () => {
     expect(w("reqDropped", { ...s, turn: 5, trust: { steering: 50, ops: 40, vendor: 50 } })).toBe(0.5);
     expect(w("reqDropped", { ...s, turn: 5, onceFlags: { reqDropped: true } })).toBe(0);
     expect(w("veteranHelp", { ...s, turn: 5 })).toBe(3);
-    expect(w("veteranHelp", { ...s, turn: 11 })).toBe(0);
+    expect(w("veteranHelp", { ...s, turn: 12 })).toBe(0);
     expect(w("budgetCut", { ...s, turn: 3 })).toBe(0);
     expect(w("bossPullIn", { ...s, turn: 5 })).toBe(1);
     expect(w("bossPullIn", { ...s, turn: 5, deadline: 11 })).toBe(0);
     expect(w("bigBug", { ...s, turn: 9 })).toBe(0);
-    expect(w("bigBug", { ...s, turn: 10, techDebt: 15, quality: 60 })).toBeCloseTo(1 + 1 + 2);
+    expect(w("bigBug", { ...s, turn: 10, techDebt: 15, quality: 60 })).toBeCloseTo(0.3 + 15 / 20 + 40 / 30);
     expect(w("bigBug", { ...s, turn: 10, eventCounts: { bigBug: 2 } })).toBe(0);
   });
   it("外注がいるときだけ", () => {
@@ -185,5 +185,25 @@ describe("選択肢の効果", () => {
     expect(a.log[a.log.length - 1]).toMatchObject({ kind: "budgetCut", important: true });
     expect(a.onceFlags.budgetCut).toBe(true);
     expect(a.eventCounts.budgetCut).toBe(1);
+  });
+  it("値上げ・交代の相手は、もう参加していて契約が続いている外注さんだけ", () => {
+    const joined = member("a", { employment: "contractor", ratePerTurn: 100 });
+    const notYet = member("b", { employment: "contractor", ratePerTurn: 100, joinedTurn: 9 });
+    const leaving = member("c", { employment: "contractor", ratePerTurn: 100, leavesAfterTurn: 7 });
+    const s = baseState({ turn: 6, members: [joined, notYet, leaving] });
+    expect(vendorEventTargets(s).map((m) => m.id)).toEqual(["a"]);
+    for (let i = 0; i < 20; i++) {
+      const ev = rollEvent({ ...s, eventCounts: {}, lastEventId: null }, rng(i + 1));
+      if (ev?.eventId === "vendorRateUp" || ev?.eventId === "memberSwap") expect(ev.targetId).toBe("a");
+    }
+    const none = baseState({ turn: 6, members: [notYet, leaving] });
+    expect(w("vendorRateUp", none)).toBe(0);
+    expect(w("memberSwap", none)).toBe(0);
+  });
+  it("終盤（ターン11）でも、大バグのほかに選べるイベントがある", () => {
+    const s = baseState({ turn: 11, deadline: 12, clarity: 50, members: [member("a"), member("b"), member("c", { employment: "contractor", ratePerTurn: 100 })] });
+    const eligible = EVENT_IDS.filter((id) => w(id, s) > 0);
+    expect(eligible).toContain("bigBug");
+    expect(eligible.filter((id) => id !== "bigBug").length).toBeGreaterThanOrEqual(3);
   });
 });

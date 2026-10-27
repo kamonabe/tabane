@@ -32,27 +32,32 @@ function growthCandidates(s: GameState): Member[] {
   );
 }
 
+// 値上げや交代の話が出せる外注さん（もう参加していて、契約が続いている人）
+export function vendorEventTargets(s: GameState): Member[] {
+  return contractors(s).filter((m) => m.joinedTurn <= s.turn && m.leavesAfterTurn === null && m.awayTurns === 0);
+}
+
 export const EVENT_DEFS: Record<EventId, EventDef> = {
-  opsRequest: { weight: (s) => (inTurns(s, 3, 9) && times(s, "opsRequest") < 3 ? 2 + s.profile.opsImpact : 0) },
-  reqRework: { weight: (s) => (inTurns(s, 5, 9) && s.clarity < 90 ? (100 - s.clarity) / 10 : 0) },
+  opsRequest: { weight: (s) => (inTurns(s, 3, 11) && times(s, "opsRequest") < 3 ? 2 + s.profile.opsImpact : 0) },
+  reqRework: { weight: (s) => (inTurns(s, 5, 11) && s.clarity < 90 ? (100 - s.clarity) / 10 : 0) },
   reqDropped: { weight: (s) => (inTurns(s, 5, 9) && !s.onceFlags.reqDropped ? (s.trust.ops >= 55 ? 2 : 0.5) : 0) },
   memberSick: { weight: () => 0 },
   quitRisk: { weight: () => 0 },
   memberGrowth: { weight: (s) => (growthCandidates(s).length > 0 ? 2 : 0) },
   veteranHelp: {
-    weight: (s) => (inTurns(s, 5, 10) && !s.onceFlags.veteranHelp ? 1 + (s.trust.steering >= 60 ? 2 : 0) : 0),
+    weight: (s) => (inTurns(s, 5, 11) && !s.onceFlags.veteranHelp ? 1 + (s.trust.steering >= 60 ? 2 : 0) : 0),
   },
   vendorRateUp: {
-    weight: (s) => (contractors(s).length > 0 && inTurns(s, 4, 10) && times(s, "vendorRateUp") < 2 ? 2 : 0),
+    weight: (s) => (vendorEventTargets(s).length > 0 && inTurns(s, 4, 11) && times(s, "vendorRateUp") < 2 ? 2 : 0),
   },
   memberSwap: {
     weight: (s) =>
-      contractors(s).length > 0 && inTurns(s, 4, 10) && !s.onceFlags.memberSwap ? 1 + (s.trust.vendor < 40 ? 3 : 0) : 0,
+      vendorEventTargets(s).length > 0 && inTurns(s, 4, 11) && !s.onceFlags.memberSwap ? 1 + (s.trust.vendor < 40 ? 3 : 0) : 0,
   },
-  budgetCut: { weight: (s) => (inTurns(s, 4, 9) && !s.onceFlags.budgetCut ? 1 : 0) },
+  budgetCut: { weight: (s) => (inTurns(s, 4, 10) && !s.onceFlags.budgetCut ? 1 : 0) },
   bossPullIn: { weight: (s) => (inTurns(s, 5, 8) && !s.onceFlags.bossPullIn && s.deadline === 12 ? 1 : 0) },
   bigBug: {
-    weight: (s) => (s.turn >= 10 && times(s, "bigBug") < 2 ? 1 + s.techDebt / 15 + (100 - s.quality) / 20 : 0),
+    weight: (s) => (s.turn >= 10 && times(s, "bigBug") < 2 ? 0.3 + s.techDebt / 20 + (100 - s.quality) / 30 : 0),
   },
 };
 
@@ -81,7 +86,7 @@ export function rollEvent(s: GameState, rng: Rng): RolledEvent | null {
   const eventId = weightedPick(rng, items);
   let targetId: string | null = null;
   if (eventId === "memberGrowth") targetId = pick(rng, growthCandidates(s)).id;
-  if (eventId === "vendorRateUp" || eventId === "memberSwap") targetId = pick(rng, contractors(s)).id;
+  if (eventId === "vendorRateUp" || eventId === "memberSwap") targetId = pick(rng, vendorEventTargets(s)).id;
   return { eventId, targetId };
 }
 
