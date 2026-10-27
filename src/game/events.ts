@@ -70,7 +70,7 @@ export function rollEvent(s: GameState, rng: Rng): RolledEvent | null {
   const active = activeMembers(s);
   // 1. 優先イベント
   const tired = [...active].sort((a, b) => b.fatigue - a.fatigue)[0];
-  if (tired && chance(rng, sickChance(tired))) return { eventId: "memberSick", targetId: tired.id };
+  if (tired && sickChance(tired) > 0 && chance(rng, sickChance(tired))) return { eventId: "memberSick", targetId: tired.id };
   const gloomy = [...active].sort((a, b) => a.morale - b.morale)[0];
   if (gloomy && gloomy.morale < 25 && chance(rng, 0.5)) return { eventId: "quitRisk", targetId: gloomy.id };
   // 2. ランダムイベント
