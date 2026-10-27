@@ -88,6 +88,9 @@ describe("エンディングの優先順位", () => {
   });
   it("その他", () => {
     expect(pickEnding({ ...s, departures: 1 }, o({ grades: { ...all("good"), scope: "meh" } }))).toBe("burnout");
+    expect(pickEnding(s, o({ grades: { ...all("good"), team: "bad" } }))).toBe("quiet"); // 離脱も疲労もない → 責めない結末
+    const worn = baseState({ members: [member("a", { fatigue: 90 }), member("b", { fatigue: 80 })] });
+    expect(pickEnding(worn, o({ grades: { ...all("good"), team: "bad" } }))).toBe("burnout"); // 本当に疲れ切っている
     expect(pickEnding({ ...s, trust: { steering: 60, ops: 75, vendor: 50 } }, o({ grades: { ...all("good"), delivery: "meh" } }))).toBe("thanked");
     expect(pickEnding(s, o({ grades: { ...all("good"), scope: "meh" } }))).toBe("smallStart");
     expect(pickEnding({ ...s, skillUps: 3 }, o({ grades: { ...all("meh"), team: "great" } }))).toBe("grew");

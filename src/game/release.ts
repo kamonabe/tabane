@@ -3,7 +3,7 @@ import {
   AUTO_RELEASE_RATIO, DEBT_QUALITY_PENALTY, DEFER_OPS_BASE, DEFER_OPS_PER_RATIO, GLOSS_PENALTY,
   GLOSS_REVEAL_RELEASE_RATIO, GRADE_COST, GRADE_DELIVERY, GRADE_QUALITY, GRADE_SCOPE, GRADE_STAKEHOLDERS, GRADE_TEAM,
   HONESTY_BONUS, INCIDENT_BASE, INCIDENT_MAX, INCIDENT_MIN, INCIDENT_OPS, INCIDENT_OPS_MULT, INCIDENT_STEERING,
-  INCOMPLETE_QUALITY_PENALTY, MAX_DEADLINE,
+  BURNOUT_FATIGUE, INCOMPLETE_QUALITY_PENALTY, MAX_DEADLINE,
 } from "./balance";
 import { addLog, avg, clamp, rosterMembers, setTrust } from "./derived";
 import { chance } from "./random";
@@ -107,7 +107,12 @@ export function pickEnding(s: GameState, o: Pick<Outcome, "canceled" | "incident
   if (o.canceled) return "canceled";
   if (o.incident) return "incident";
   if (Object.values(g).every((x) => atLeast(x, "good"))) return "bundled";
-  if (atLeast(g.delivery, "good") && (g.team === "bad" || s.departures >= 1)) return "burnout";
+  if (atLeast(g.delivery, "good")) {
+    // 燃え尽きは、実際に誰かが抜けたか、本当に疲れ切っているときだけ。士気が低いだけなら「静かなチーム」
+    const tired = avg(rosterMembers(s).map((m) => m.fatigue)) >= BURNOUT_FATIGUE;
+    if (s.departures >= 1 || (g.team === "bad" && tired)) return "burnout";
+    if (g.team === "bad") return "quiet";
+  }
   if (!atLeast(g.delivery, "good") && s.trust.ops >= 70 && atLeast(g.quality, "good")) return "thanked";
   if (!atLeast(g.scope, "good") && atLeast(g.quality, "good")) return "smallStart";
   if (g.team === "great" && s.skillUps >= 3) return "grew";

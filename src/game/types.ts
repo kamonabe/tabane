@@ -22,7 +22,7 @@ export type EventId =
   | "veteranHelp" | "vendorRateUp" | "memberSwap" | "budgetCut" | "bossPullIn" | "bigBug";
 
 export type EndingId =
-  | "canceled" | "incident" | "bundled" | "burnout" | "thanked" | "smallStart" | "grew" | "managed";
+  | "canceled" | "incident" | "bundled" | "burnout" | "quiet" | "thanked" | "smallStart" | "grew" | "managed";
 
 export interface Member {
   id: string; // "m1" など
