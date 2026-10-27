@@ -1,12 +1,12 @@
 // ターン画面に重なるモーダル（会議・イベント・上申・外注交渉・リリース判定・結果カード）
-import { ESC_COST } from "../../game/balance";
+import { ESC_COST, STAFF_FUND_RATE } from "../../game/balance";
 import { behind, displayedTotal, plannedFracNow, qualityLabel, reportedFrac, rosterMembers, uncertaintyLabel } from "../../game/derived";
 import { approvalScore, availability, ESCALATION_LABEL, ESCALATION_TYPES, effectiveStyle } from "../../game/escalation";
 import { eventChoiceEnabled, eventTarget } from "../../game/events";
 import { meetingOptions } from "../../game/meetings";
 import { releaseOptions, remainingRatio } from "../../game/release";
-import { budgetCoverage } from "../../game/vendor";
-import type { EscalationSource, EscalationStyle, EscalationType, GameState } from "../../game/types";
+import { staffFund, staffPayTurns } from "../../game/vendor";
+import type { Archetype, EscalationSource, EscalationStyle, EscalationType, GameState } from "../../game/types";
 import { EVENT_TEXT } from "../../text/events";
 import { choiceButton, modal } from "../components/modal";
 import { ARCHETYPE_LABEL, EMPLOYMENT_LABEL, skillRow, TRAIT_LABEL } from "../components/memberCard";
@@ -164,14 +164,12 @@ function escalationModal(c: ScreenContext, source: EscalationSource, types: Esca
   );
 }
 
-function coverageEl(s: GameState, rate: number, conditional: boolean): HTMLElement {
-  const v = budgetCoverage(s, rate, conditional);
+function fundEl(s: GameState, archetype: Archetype, conditional: boolean): HTMLElement {
+  const payTurns = staffPayTurns(s, conditional);
   return h(
     "p",
-    { class: v.enough ? "note" : "note note-warn" },
-    v.enough
-      ? `いまの予算の空きで約${v.covers}ターン分（払うのは${v.payTurns}ターン）`
-      : `いまの予算の空きは約${v.covers}ターン分。${v.payTurns}ターン払うには足りないかも`,
+    { class: "note" },
+    `この人の費用（相場の上限 ${STAFF_FUND_RATE[archetype]}万円 × ${payTurns}ターン = ${staffFund(s, archetype, conditional)}万円）は、組織長が予算に足してくれます。単価が安いほど、余りが出ます`,
   );
 }
 
@@ -197,7 +195,7 @@ function vendorModal(c: ScreenContext): HTMLElement {
             h("header", { class: "member-head" }, portraitEl(m.portraitId, "normal", "md"), h("div", { class: "member-id" }, h("strong", null, m.name), h("span", { class: "badge badge-contractor" }, EMPLOYMENT_LABEL.contractor), h("span", { class: "badge badge-plain" }, ARCHETYPE_LABEL[m.archetype] + (m.archetype === "junior" ? "（育てがいあり）" : "")))),
             skillRow(m),
             h("p", { class: "rate" }, t("{tanka}"), `：${m.ratePerTurn} 万円／ターン`),
-            coverageEl(s, m.ratePerTurn, p.conditional),
+            fundEl(s, m.archetype, p.conditional),
             h("p", { class: "note" }, `申告のくせ：${m.traitRevealed ? TRAIT_LABEL[m.trait] : "会ってみないと分からない"}`),
             h("button", { class: "button button-small", type: "button", onClick: () => c.dispatch({ type: "vendorHire", index: i }) }, "この人にお願いする"),
           );

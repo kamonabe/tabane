@@ -99,7 +99,7 @@ const ACTIONS: ActionDef[] = [
   { kind: "coach", group: "team", label: "育てる", desc: "スキル+1。その人の今ターンの出力は半分" },
   { kind: "opsSync", group: "coord", label: "運用とすり合わせ", desc: "{unyou}との信頼↑。{youken}が固まる" },
   { kind: "nemawashi", group: "coord", label: "根回しする", desc: "{nemawashi}で、{joshin}と{stecomi}が有利に" },
-  { kind: "vendorTalk", group: "coord", label: "外注会社と話す", desc: "{gaichu}会社との信頼↑" },
+  { kind: "vendorTalk", group: "coord", label: "外注会社と話す", desc: "外注さんの会社との信頼↑" },
   { kind: "handsOn", group: "other", label: "自分で手を動かす", desc: "すぐ進む（+2）。その分、ほかに使える時間が減る" },
 ];
 
