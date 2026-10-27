@@ -1,3 +1,4 @@
+import { MODES } from "../../game/members";
 import { actionCost, canAddAction, coachLimitOf, remainingAp } from "../../game/actions";
 import {
   behind, contractors, debtLabel, displayedTotal, plannedFracNow, qualityLabel, recentReview,
@@ -6,7 +7,7 @@ import {
 import { isMeetingTurn, PHASE_ORDER, phaseOf } from "../../game/phases";
 import type { CoachSkill, GameState, LeaderAction, Phase } from "../../game/types";
 import { moraleFace, portraitEl } from "../assets";
-import { memberCard, SKILL_LABEL } from "../components/memberCard";
+import { MODE_HINT, MODE_LABEL, memberCard, SKILL_LABEL } from "../components/memberCard";
 import { meter, progressBar } from "../components/meter";
 import { h } from "../dom";
 import type { Child } from "../dom";
@@ -28,7 +29,7 @@ function header(c: ScreenContext): HTMLElement {
       "div",
       { class: "turn-title" },
       h("h1", null, `ターン ${s.turn} / ${s.deadline}`),
-      h("span", { class: "weeks" }, `（${s.turn * s.profile.weeksPerTurn}週目）`),
+      h("span", { class: "weeks" }, `（${(s.turn - 1) * s.profile.weeksPerTurn + 1}週目）`),
       meeting ? h("span", { class: "meeting-mark", title: "このターンの終わりにステコミがあります" }, "🏛 ステコミあり") : null,
     ),
     h(
@@ -76,6 +77,11 @@ function teamPanel(c: ScreenContext): HTMLElement {
     "section",
     { class: "panel team" },
     h("h2", null, `チーム（${roster.length}人）`),
+    h(
+      "dl",
+      { class: "mode-legend", "aria-label": "働き方の説明" },
+      ...MODES.map((mode) => h("div", { class: `mode-legend-item mode-legend-${mode}` }, h("dt", null, MODE_LABEL[mode]), h("dd", null, MODE_HINT[mode]))),
+    ),
     h("div", { class: "member-list" }, ...roster.map((m) => memberCard(s, m, canSwitch ? { onMode: (mode) => c.dispatch({ type: "setMode", memberId: m.id, mode }) } : {}))),
   );
 }
@@ -94,7 +100,7 @@ const ACTIONS: ActionDef[] = [
   { kind: "opsSync", group: "coord", label: "運用とすり合わせ", desc: "{unyou}との信頼↑。{youken}が固まる" },
   { kind: "nemawashi", group: "coord", label: "根回しする", desc: "{nemawashi}で、{joshin}と{stecomi}が有利に" },
   { kind: "vendorTalk", group: "coord", label: "外注会社と話す", desc: "{gaichu}会社との信頼↑" },
-  { kind: "handsOn", group: "other", label: "自分で手を動かす", desc: "すぐ進む（+2）。ほかの行動はできなくなる" },
+  { kind: "handsOn", group: "other", label: "自分で手を動かす", desc: "すぐ進む（+2）。その分、ほかに使える時間が減る" },
 ];
 
 function planLabel(s: GameState, a: LeaderAction): string {

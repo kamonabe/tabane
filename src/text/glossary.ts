@@ -11,7 +11,7 @@ export const GLOSSARY: Record<string, Term> = {
   oneonone: { label: "1on1", description: "メンバと1対1でじっくり話す時間" },
   review: { label: "レビュー", description: "できたものを見て、まちがいがないかたしかめること" },
   techDebt: { label: "技術的負債", description: "急いで作ったせいで、あとから直すのが大変になった部分" },
-  gaichu: { label: "外注", description: "ほかの会社の人に、仕事を手伝ってもらうこと" },
+  gaichu: { label: "外注", description: "ほかの会社の人に、仕事を手伝ってもらうこと。このゲームでは「派遣」のように、リーダーが直接お願いできる契約として扱うよ（現実の「業務委託」だと、指示は相手の会社を通すのがルール）" },
   tanka: { label: "単価", description: "1人に1ターン手伝ってもらう値段" },
   hikitsugi: { label: "引き継ぎ", description: "いままでの仕事の中身を、次の人に伝えること" },
   scope: { label: "範囲（スコープ）", description: "今回つくるものの中身と量" },

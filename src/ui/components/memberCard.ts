@@ -10,11 +10,11 @@ export const EMPLOYMENT_LABEL = { staff: "社員", contractor: "外注", helper:
 export const ARCHETYPE_LABEL = { veteran: "ベテラン", mid: "中堅", junior: "若手" } as const;
 export const TRAIT_LABEL: Record<Trait, string> = { careful: "きっちり", normal: "ふつう", optimistic: "楽観的" };
 export const MODE_LABEL: Record<Mode, string> = { normal: "ふつう", push: "がんばる", rest: "休む", support: "調整サポート" };
-const MODE_HINT: Record<Mode, string> = {
+export const MODE_HINT: Record<Mode, string> = {
   normal: "いつものペース",
-  push: "出力アップ。疲れて、ずれやすい",
+  push: "出力アップ。そのぶん疲れて、申告もずれやすい",
   rest: "回復する。出力は少しだけ",
-  support: "出力0。調整力が高いとリーダーの時間+1",
+  support: "自分の出力は0。調整力が高い人なら、リーダーの時間+1",
 };
 
 export function stars(n: number): string {

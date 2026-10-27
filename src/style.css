@@ -67,6 +67,11 @@ button {
   font-size: 0.85rem;
 }
 
+.note-warn {
+  color: var(--warn);
+  font-weight: bold;
+}
+
 .eyebrow {
   color: var(--accent-dark);
   font-weight: bold;
@@ -164,8 +169,9 @@ button {
 
 .kv {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 12px;
+  gap: 2px 12px;
   border-bottom: 1px dashed var(--line);
   padding-bottom: 4px;
 }
@@ -178,11 +184,14 @@ button {
 .kv dd {
   font-weight: bold;
   text-align: right;
-  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 8em;
+  overflow-wrap: anywhere;
 }
 
 .kv dt {
   min-width: 0;
+  flex: 0 1 auto;
 }
 
 /* ---------- 人物の絵（差し替え可能） ---------- */
@@ -409,6 +418,39 @@ button {
   gap: 4px;
 }
 
+@media (max-width: 520px) {
+  .modes { grid-template-columns: repeat(2, 1fr); }
+}
+
+.mode-legend {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  background: var(--bg-soft, rgba(0, 0, 0, 0.04));
+  border-radius: 10px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.mode-legend-item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.mode-legend dt {
+  flex: 0 0 6.5em;
+  font-weight: bold;
+  word-break: keep-all;
+}
+
+.mode-legend dd {
+  margin: 0;
+  color: var(--muted);
+  min-width: 0;
+}
+
 .mode {
   font-size: 0.72rem;
   padding: 6px 2px;
@@ -417,6 +459,7 @@ button {
   border-radius: 8px;
   cursor: pointer;
   line-height: 1.2;
+  word-break: keep-all;
 }
 
 .mode-active {
