@@ -3,9 +3,9 @@ import {
   ADD_BUDGET, CUT_SCOPE, CUT_SCOPE_OPS, CUT_SCOPE_OPS_WITH_SYNC, ESC_APPROVE, ESC_CONDITIONAL, ESC_COST,
   ESC_COUNT_PENALTY, ESC_FIRM_PENALTY, ESC_GLOSS_PENALTY, ESC_NEMAWASHI_BONUS, ESC_PREPARED_BONUS,
   ESC_RECOVERY_BONUS, ESC_REESTIMATE_BONUS, ESC_REJECT_TRUST, ESC_ROLL_SPREAD, EXTEND, GUIDE_FAIR, GUIDE_GOOD,
-  HIRE_COMFORT_RATE, HIRE_MIN_RATE, CONTRACT_TURNS, MAX_DEADLINE, MAX_TEAM_SIZE,
+  ESC_STAFF_MOD, EXTEND_OPS, MAX_DEADLINE, MAX_TEAM_SIZE,
 } from "./balance";
-import { behind, addLog, freeBudget, hasNemawashi, reportedDone, rosterMembers, setTrust } from "./derived";
+import { behind, addLog, contractors, hasNemawashi, reportedDone, rosterMembers, setTrust } from "./derived";
 import { openVendorModal } from "./vendor";
 import { randomInt } from "./random";
 import type { Rng } from "./random";
@@ -27,15 +27,6 @@ export interface ApprovalScore {
 // その場所から開いた上申の説明スタイル。ターン画面以外は常に「準備した」扱い
 export function effectiveStyle(source: EscalationSource, style: EscalationStyle): EscalationStyle {
   return source === "turn" ? style : "prepared";
-}
-
-// 人を増やすときの予算の見通し。ok = 余裕あり／tight = 期間限定ならなんとか／none = 払えない
-export function hireAffordability(s: GameState): "ok" | "tight" | "none" {
-  const rest = Math.max(0, s.deadline - s.turn);
-  const free = freeBudget(s);
-  if (free >= HIRE_COMFORT_RATE * rest) return "ok";
-  if (free >= HIRE_MIN_RATE * Math.min(rest, CONTRACT_TURNS)) return "tight";
-  return "none";
 }
 
 export function availability(s: GameState, type: EscalationType): { ok: boolean; reason?: string } {
@@ -67,11 +58,7 @@ export function approvalScore(
   add(s.turn <= 2 ? "早い時期に相談 ＋" : "時期が遅い −", s.turn <= 2 ? 15 : s.turn <= 6 ? 0 : -10);
   switch (type) {
     case "addStaff":
-      {
-        const a = hireAffordability(s);
-        add("残り予算がきびしい −", a === "tight" ? -15 : 0);
-        add("予算が足りず、人の費用が払えない −", a === "none" ? -50 : 0);
-      }
+      add("人とお金の両方の相談 −", ESC_STAFF_MOD);
       break;
     case "addBudget":
       add("お金の相談は通りにくい −", -10);
@@ -100,20 +87,24 @@ export function outcomeOf(roll: number): "approved" | "conditional" | "rejected"
   return roll >= ESC_APPROVE ? "approved" : roll >= ESC_CONDITIONAL ? "conditional" : "rejected";
 }
 
-const BOSS_LINES_NO_BUDGET = {
-  approved: "",
-  conditional: "",
-  rejected: "人を増やしたいのはわかるけど、そのお金はどこから出すの？ 先に予算の話をしてくれる？",
-} as const;
-
 export const BOSS_LINES = {
   approved: "わかった。そこまで考えてるなら任せるよ。",
   conditional: "全部は無理だけど、半分ならいいよ。",
   rejected: "うーん、今回は見送りで。もう少し様子を見せて。",
 } as const;
 
+// 増員は、人の費用ごと承認される
+const BOSS_LINES_ADD_STAFF = {
+  ...BOSS_LINES,
+  approved: "わかった。その人の費用は予算に足しておくよ。そのぶん、しっかり頼むね。",
+  conditional: "全部は無理だけど、半分ならいいよ。その人の費用は予算に足しておくから。",
+} as const;
+
 // 承認・条件付き承認の効果を適用する
-export function applyEscalation(s: GameState, type: EscalationType, outcome: "approved" | "conditional", rng: Rng): string {
+// source が release の延長は、リリース判定まで来てからの「遅れ」。それより前の延長は「計画変更」
+export function applyEscalation(
+  s: GameState, type: EscalationType, outcome: "approved" | "conditional", rng: Rng, source: EscalationSource = "turn",
+): string {
   const full = outcome === "approved";
   switch (type) {
     case "addStaff":
@@ -138,7 +129,15 @@ export function applyEscalation(s: GameState, type: EscalationType, outcome: "ap
     case "extendSchedule": {
       const v = Math.min(full ? EXTEND.approved : EXTEND.conditional, MAX_DEADLINE - s.deadline);
       s.deadline += v;
-      return `締切が ${v} ターン延びた。`;
+      // 延びたターンの外注費は、使ってよい予算には入らない予定外の出費
+      const extra = contractors(s).filter((m) => m.leavesAfterTurn === null).reduce((x, m) => x + m.ratePerTurn, 0) * v;
+      s.budget += extra;
+      s.unplannedCost += extra;
+      if (source === "release") return `締切が ${v} ターン延びた。`;
+      s.committedDeadline += v;
+      s.replanned = true;
+      setTrust(s, "ops", EXTEND_OPS);
+      return `締切が ${v} ターン延びた。計画を変えることになるので、運用担当さんの予定もずれてしまう。`;
     }
   }
 }
@@ -161,24 +160,16 @@ export function escalate(state: GameState, type: EscalationType, style: Escalati
   const { score } = approvalScore(s, type, st, source);
   const roll = score + randomInt(rng, -ESC_ROLL_SPREAD, ESC_ROLL_SPREAD);
   let outcome: "approved" | "conditional" | "rejected" = outcomeOf(roll);
-  let lines: Record<"approved" | "conditional" | "rejected", string> = BOSS_LINES;
+  const lines = type === "addStaff" ? BOSS_LINES_ADD_STAFF : BOSS_LINES;
   s.escalations.push({ turn: s.turn, type, style: st, score, roll, outcome });
   if (source !== "reestimate") s.escalationCount += 1;
   if (s.pending?.kind === "escalation") s.pending = null;
   let text: string;
-  if (type === "addStaff" && hireAffordability(s) === "none") {
-    // 払えない人を増やす話は通らない（先に予算の相談をする、という学び）
-    outcome = "rejected";
-    setTrust(s, "steering", ESC_REJECT_TRUST);
-    text = "いまの予算では、新しい人の費用が払えない。先に予算を相談してみよう。";
-    lines = BOSS_LINES_NO_BUDGET;
-  } else if (outcome === "rejected") {
+  if (outcome === "rejected") {
     setTrust(s, "steering", ESC_REJECT_TRUST);
     text = "今回は見送りになった。材料をそろえて、また相談しよう。";
   } else {
-    // 予算がきびしいときは、満額の承認でも「期間限定」に変わる
-    if (type === "addStaff" && outcome === "approved" && hireAffordability(s) === "tight") outcome = "conditional";
-    text = applyEscalation(s, type, outcome, rng);
+    text = applyEscalation(s, type, outcome, rng, source);
     // リリース判定から延期が通ったら、イベントのあとの流れ（次のターン）に戻す
     if (source === "release" && type === "extendSchedule") s.status = "event";
   }

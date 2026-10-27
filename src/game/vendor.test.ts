@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetCoverage, hireCandidate, makeCandidates, negotiateRate, openVendorModal } from "./vendor";
+import { hireCandidate, makeCandidates, negotiateRate, openVendorModal, staffFund } from "./vendor";
 import { baseState, fixedRng, rng } from "./testUtils";
 
 const open = (conditional: boolean) => {
@@ -33,22 +33,21 @@ describe("vendor", () => {
     expect(ng.trust.vendor).toBe(45);
     expect(negotiateRate(ok, fixedRng(0))).toBe(ok);
   });
-  it("採用: 次のターンから参加、立ち上がり1ターン、条件付きは3ターンで契約終了", () => {
+  it("採用: 次のターンから参加、立ち上がり2ターン、条件付きは3ターンで契約終了", () => {
     const a = hireCandidate(open(false), 1);
     const m = a.members[a.members.length - 1];
     expect(m.joinedTurn).toBe(5);
-    expect(m.rampTurns).toBe(1);
+    expect(m.rampTurns).toBe(2);
     expect(m.leavesAfterTurn).toBeNull();
     expect(m.employment).toBe("contractor");
     expect(a.pending).toBeNull();
     const b = hireCandidate(open(true), 0);
     expect(b.members[b.members.length - 1].leavesAfterTurn).toBe(7);
   });
-  it("予算で何ターン払えるかを数える（今いる外注さんの分は除く）", () => {
-    const s = baseState({ turn: 4, deadline: 12, budget: 400 });
-    expect(budgetCoverage(s, 90, false)).toEqual({ covers: 4, payTurns: 8, enough: false });
-    expect(budgetCoverage(s, 90, true)).toEqual({ covers: 4, payTurns: 3, enough: true });
-    const c = { ...s, members: [{ ...s.members[0], employment: "contractor" as const, ratePerTurn: 20 }] };
-    expect(budgetCoverage(c, 90, true).covers).toBe(2); // 400 − 20×8 = 240
+  it("増員の費用は、相場の上限 × 払うターン数（承認は締切まで、条件付きは最長 3 ターン）", () => {
+    const s = baseState({ turn: 4, deadline: 12 });
+    expect(staffFund(s, "veteran", false)).toBe(140 * 8);
+    expect(staffFund(s, "mid", true)).toBe(110 * 3);
+    expect(staffFund({ ...s, turn: 11 }, "junior", true)).toBe(80);
   });
 });

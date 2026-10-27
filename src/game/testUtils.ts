@@ -30,7 +30,7 @@ export function baseState(over: Partial<GameState> = {}): GameState {
   s.clarity = s.initialClarity = 100;
   s.techDebt = 0;
   s.quality = 60;
-  s.budget = s.initialBudget = 1000;
+  s.budget = s.initialBudget = s.approvedBudget = 1000;
   s.trust = { steering: 60, ops: 60, vendor: 50 };
   s.turn = 5;
   s.apMax = 4;

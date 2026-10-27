@@ -89,11 +89,18 @@ export const CUT_SCOPE_OPS_WITH_SYNC = -2;
 export const CONTRACT_TURNS = 3;
 export const GUIDE_GOOD = 75;
 export const GUIDE_FAIR = 55;
+export const ESC_STAFF_MOD = -5; // 人とお金の両方の相談
+export const EXTEND_OPS = -3; // 延長で運用さんの予定がずれる
+export const BUDGET_CUT_RATE = 0.15;
+export const BUDGET_CUT_FREE_SHARE = 0.5;
+export const BUDGET_CUT_MIN_FREE = 100;
+export const RATE_UP = 15;
 
 // ベンダ（6.4）
 export const VENDOR_RATES = { veteran: [120, 140], mid: [90, 110], junior: [65, 80] } as const;
-export const HIRE_COMFORT_RATE = 100; // 残りターン × これ以上の予算があれば、人を増やしても安心
-export const HIRE_MIN_RATE = 65; // いちばん安い候補の単価の目安
+export const STAFF_FUND_RATE: Record<Archetype, number> = { veteran: 140, mid: 110, junior: 80 }; // 増員の費用として予算に足す、相場の上限
+export const HIRE_RAMP_TURNS = 2;
+export const HIRE_ONBOARD_AP = 1; // 採用した次のターン、リーダーの AP が減る
 export const HIRE_START = { morale: 60, fatigue: 10 };
 export const HELPER_TURNS = 2;
 
@@ -115,7 +122,8 @@ export const DEFER_OPS_BASE = 8;
 export const DEFER_OPS_PER_RATIO = 40;
 export const INCOMPLETE_QUALITY_PENALTY = 60;
 export const DEBT_QUALITY_PENALTY = 0.3;
-export const INCIDENT_BASE = 70;
+export const INCIDENT_BASE = 60;
+export const INCIDENT_DIV = 150;
 export const INCIDENT_OPS_MULT = { 1: 0.7, 2: 1.0, 3: 1.3 } as const;
 export const INCIDENT_MIN = 0.03;
 export const INCIDENT_MAX = 0.8;
@@ -133,7 +141,7 @@ export const BURNOUT_FATIGUE = 65; // 離脱がなくても、平均疲労がこ
 
 // 初期生成（3章）
 export const SETUP_MAX_TRIES = 20;
-export const RATIO_MIN = 1.25; // 仕様書は 1.15。隠れた手戻りを増やしたぶん、名目能力に対する総作業量を重くした
+export const RATIO_MIN = 1.45; // 仕様書は 1.15。隠れた手戻りと、上申で増える人・時間のぶん、名目能力に対する総作業量を重くした
 export const RATIO_SPREAD = 0.22;
 export const DIFFICULTY_CAP = 1.7;
 export const CAPACITY_FACTOR = 0.9;

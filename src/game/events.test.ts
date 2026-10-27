@@ -24,6 +24,8 @@ describe("イベントの条件", () => {
     expect(w("veteranHelp", { ...s, turn: 5 })).toBe(3);
     expect(w("veteranHelp", { ...s, turn: 12 })).toBe(0);
     expect(w("budgetCut", { ...s, turn: 3 })).toBe(0);
+    expect(w("budgetCut", { ...s, turn: 5 })).toBe(1);
+    expect(w("budgetCut", { ...s, turn: 5, budget: 99 })).toBe(0); // 使っていない分が 100 未満なら出ない
     expect(w("bossPullIn", { ...s, turn: 5 })).toBe(1);
     expect(w("bossPullIn", { ...s, turn: 5, deadline: 11 })).toBe(0);
     expect(w("bigBug", { ...s, turn: 9 })).toBe(0);
@@ -36,6 +38,7 @@ describe("イベントの条件", () => {
     expect(w("memberSwap", s)).toBe(0);
     const c = { ...s, members: [...s.members, contractor()] };
     expect(w("vendorRateUp", c)).toBe(2);
+    expect(w("vendorRateUp", { ...c, budget: 15 * 7 - 1 + 100 })).toBe(0); // 払えない値上げの話は来ない（残り 7 ターン）
     expect(w("memberSwap", c)).toBe(1);
     expect(w("memberSwap", { ...c, trust: { steering: 50, ops: 50, vendor: 30 } })).toBe(4);
     expect(w("vendorRateUp", { ...c, eventCounts: { vendorRateUp: 2 } })).toBe(0);
@@ -157,9 +160,14 @@ describe("選択肢の効果", () => {
   });
   it("E10 予算の見直し", () => {
     const a = pick("budgetCut", 0);
-    expect([a.budget, a.members[0].morale]).toEqual([850, 57]);
+    expect([a.budget, a.approvedBudget, a.budgetCutAmount, a.members[0].morale]).toEqual([850, 850, 150, 57]);
     expect(pick("budgetCut", 1).nextTurnApPenalty).toBe(1);
     expect(pick("budgetCut", 2).secretNewsTurn).toBe(8);
+  });
+  it("予算の見直しは、使っていない分の半分まで", () => {
+    const s = baseState({ turn: 5, budget: 200, approvedBudget: 1000 }); // 自由に使えるのは 200
+    const a = pick("budgetCut", 0, undefined, s);
+    expect([a.budget, a.approvedBudget, a.budgetCutAmount]).toEqual([100, 900, 100]);
   });
   it("E11 前倒し", () => {
     const a = pick("bossPullIn", 0);

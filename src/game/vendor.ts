@@ -1,6 +1,6 @@
 // 外注会社との交渉（仕様書 6.4）
-import { CONTRACT_TURNS, HIRE_START, VENDOR_RATES } from "./balance";
-import { clamp, freeBudget, setTrust } from "./derived";
+import { CONTRACT_TURNS, HIRE_ONBOARD_AP, HIRE_RAMP_TURNS, HIRE_START, STAFF_FUND_RATE, VENDOR_RATES } from "./balance";
+import { clamp, setTrust } from "./derived";
 import { createMember, makeSkills, nextMemberId, pickName, pickTrait } from "./members";
 import { chance, randomInt } from "./random";
 import type { Rng } from "./random";
@@ -60,9 +60,15 @@ export function hireCandidate(state: GameState, index: number): GameState {
   const m = c.member;
   m.id = nextMemberId(s.members);
   m.joinedTurn = s.turn + 1;
-  m.rampTurns = 1;
+  m.rampTurns = HIRE_RAMP_TURNS;
   m.morale = clamp(HIRE_START.morale, 0, 100);
   m.leavesAfterTurn = p.conditional ? s.turn + CONTRACT_TURNS : null;
+  // 人の費用は、組織長が予算に足してくれる（使ってよい予算にも入る）
+  const fund = staffFund(s, m.archetype, p.conditional);
+  s.budget += fund;
+  s.approvedBudget += fund;
+  s.fundedStaff += fund;
+  s.nextTurnApPenalty += HIRE_ONBOARD_AP;
   s.members.push(m);
   s.pending = null;
   s.lastResult = `${m.name}さんが、次のターンからチームに加わります。`;
@@ -76,10 +82,12 @@ export function skipVendor(state: GameState): GameState {
   return s;
 }
 
-// 候補を雇ったとき、今いる外注さんの分を除いた予算で何ターン払えるか（payTurns = 払う予定のターン数）
-export function budgetCoverage(s: GameState, ratePerTurn: number, conditional: boolean): { covers: number; payTurns: number; enough: boolean } {
+// 増員の費用 = 相場の上限 × 払うターン数（承認なら締切まで、条件付きなら最長 3 ターン）
+export function staffPayTurns(s: GameState, conditional: boolean): number {
   const rest = Math.max(0, s.deadline - s.turn);
-  const payTurns = conditional ? Math.min(CONTRACT_TURNS, rest) : rest;
-  const covers = Math.floor(freeBudget(s) / Math.max(1, ratePerTurn));
-  return { covers, payTurns, enough: covers >= payTurns };
+  return conditional ? Math.min(CONTRACT_TURNS, rest) : rest;
+}
+
+export function staffFund(s: GameState, archetype: Archetype, conditional: boolean): number {
+  return STAFF_FUND_RATE[archetype] * staffPayTurns(s, conditional);
 }

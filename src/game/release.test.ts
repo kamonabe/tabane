@@ -38,10 +38,10 @@ describe("リリース判定", () => {
     const s = baseState({ quality: 80, techDebt: 20 });
     expect(finalQualityOf(s, 0.1)).toBeCloseTo(80 - 6 - 6);
     expect(finalQualityOf({ ...s, quality: 5 }, 1)).toBe(0);
-    expect(incidentChance(70, 2)).toBe(0.03);
-    expect(incidentChance(40, 2)).toBeCloseTo(0.3);
-    expect(incidentChance(40, 1)).toBeCloseTo(0.21);
-    expect(incidentChance(40, 3)).toBeCloseTo(0.39);
+    expect(incidentChance(60, 2)).toBe(0.03);
+    expect(incidentChance(30, 2)).toBeCloseTo(0.2);
+    expect(incidentChance(30, 1)).toBeCloseTo(0.14);
+    expect(incidentChance(30, 3)).toBeCloseTo(0.26);
     expect(incidentChance(-100, 3)).toBe(0.8);
   });
   it("障害が起きたら ops −20、steering −10", () => {
@@ -67,8 +67,18 @@ describe("評価の境目", () => {
     expect(g((v) => gradeDown(v, [0.9, 1.0, 1.2]), 0.9, 0.91, 1.0, 1.01, 1.2, 1.21)).toEqual(["great", "good", "good", "meh", "meh", "bad"]);
     expect(g((v) => gradeDown(v, [0, 1, 2]), 0, 1, 2, 3)).toEqual(["great", "good", "meh", "bad"]);
   });
+  it("お金は spent ÷ approvedBudget、計画変更したゲームの納期は最高でも ○", () => {
+    const s = baseState({ doneWork: 100, spent: 1000, initialBudget: 1000, approvedBudget: 1500 });
+    const o = { canceled: false, releaseTurn: 12, incident: false, finalQuality: 85 };
+    expect(evaluate(s, o).cost).toBe("great"); // 1000 / 1500
+    expect(evaluate({ ...s, approvedBudget: 1000 }, o).cost).toBe("good");
+    expect(evaluate({ ...s, approvedBudget: 900 }, o).cost).toBe("meh");
+    expect(evaluate(s, o).delivery).toBe("great");
+    expect(evaluate({ ...s, replanned: true }, o).delivery).toBe("good");
+    expect(evaluate({ ...s, replanned: true, committedDeadline: 11 }, o).delivery).toBe("good");
+  });
   it("6観点: 障害で品質が1段階下がる、予算切れは × ", () => {
-    const s = baseState({ doneWork: 100, spent: 800, initialBudget: 1000 });
+    const s = baseState({ doneWork: 100, spent: 800, initialBudget: 1000, approvedBudget: 1000 });
     const base = evaluate(s, { canceled: false, releaseTurn: 12, incident: false, finalQuality: 85 });
     expect(base).toMatchObject({ quality: "great", cost: "great", delivery: "great", scope: "great", stakeholders: "good" });
     expect(evaluate(s, { canceled: false, releaseTurn: 12, incident: true, finalQuality: 85 }).quality).toBe("good");

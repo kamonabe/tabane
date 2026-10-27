@@ -1,7 +1,10 @@
 // イベント（仕様書 7.4）
-import { EVENT_CHANCE, EVENT_CHANCE_MEETING, FATIGUE_HIGH, HELPER_TURNS } from "./balance";
 import {
-  activeMembers, addLog, clamp, contractors, presentMembers, reportedDone, setTrust,
+  BUDGET_CUT_FREE_SHARE, BUDGET_CUT_MIN_FREE, BUDGET_CUT_RATE, EVENT_CHANCE, EVENT_CHANCE_MEETING, FATIGUE_HIGH, HELPER_TURNS,
+  RATE_UP,
+} from "./balance";
+import {
+  activeMembers, addLog, clamp, contractors, freeBudget, presentMembers, reportedDone, setTrust,
 } from "./derived";
 import { isMeetingTurn } from "./phases";
 import { createMember, changeMorale, nextMemberId, pickName, pickTrait, makeSkills } from "./members";
@@ -48,13 +51,18 @@ export const EVENT_DEFS: Record<EventId, EventDef> = {
     weight: (s) => (inTurns(s, 5, 11) && !s.onceFlags.veteranHelp ? 1 + (s.trust.steering >= 60 ? 2 : 0) : 0),
   },
   vendorRateUp: {
-    weight: (s) => (vendorEventTargets(s).length > 0 && inTurns(s, 4, 11) && times(s, "vendorRateUp") < 2 ? 2 : 0),
+    weight: (s) =>
+      vendorEventTargets(s).length > 0 && inTurns(s, 4, 11) && times(s, "vendorRateUp") < 2 &&
+      freeBudget(s) >= RATE_UP * Math.max(0, s.deadline - s.turn) // 払えない値上げの話は来ない
+        ? 2 : 0,
   },
   memberSwap: {
     weight: (s) =>
       vendorEventTargets(s).length > 0 && inTurns(s, 4, 11) && !s.onceFlags.memberSwap ? 1 + (s.trust.vendor < 40 ? 3 : 0) : 0,
   },
-  budgetCut: { weight: (s) => (inTurns(s, 4, 10) && !s.onceFlags.budgetCut ? 1 : 0) },
+  budgetCut: {
+    weight: (s) => (inTurns(s, 4, 10) && !s.onceFlags.budgetCut && freeBudget(s) >= BUDGET_CUT_MIN_FREE ? 1 : 0),
+  },
   bossPullIn: { weight: (s) => (inTurns(s, 5, 8) && !s.onceFlags.bossPullIn && s.deadline === 12 ? 1 : 0) },
   bigBug: {
     weight: (s) => (s.turn >= 10 && times(s, "bigBug") < 2 ? 0.3 + s.techDebt / 20 + (100 - s.quality) / 30 : 0),
@@ -227,7 +235,7 @@ export function applyEventChoice(state: GameState, choice: number, rng: Rng): Ga
     case "vendorRateUp":
       if (t) {
         if (choice === 0) {
-          t.ratePerTurn += 15;
+          t.ratePerTurn += RATE_UP;
           setTrust(s, "vendor", 6);
         } else if (choice === 1) {
           const p2 = s.trust.vendor / 100 + 0.2 + (s.turnsSinceVendorTalk <= 1 ? 0.1 : 0);
@@ -236,7 +244,7 @@ export function applyEventChoice(state: GameState, choice: number, rng: Rng): Ga
             setTrust(s, "vendor", -2);
             result = "交渉してみたら、「それなら少しだけで」と小さな値上げで済んだ。";
           } else {
-            t.ratePerTurn += 15;
+            t.ratePerTurn += RATE_UP;
             setTrust(s, "vendor", -4);
             result = "交渉はうまくいかず、結局そのまま値上げ。相手の印象も少し悪くなった。";
           }
@@ -266,7 +274,15 @@ export function applyEventChoice(state: GameState, choice: number, rng: Rng): Ga
       s.onceFlags.memberSwap = true;
       break;
     case "budgetCut":
-      s.budget = Math.max(0, s.budget - Math.round(s.initialBudget * 0.15));
+      {
+        // 使っていない分から、最大でも半分まで
+        const cut = Math.min(
+          Math.round(s.initialBudget * BUDGET_CUT_RATE), Math.round(Math.max(0, freeBudget(s)) * BUDGET_CUT_FREE_SHARE),
+        );
+        s.budget -= cut;
+        s.approvedBudget -= cut;
+        s.budgetCutAmount += cut;
+      }
       s.onceFlags.budgetCut = true;
       if (choice === 0) for (const m of others()) changeMorale(m, -3);
       else if (choice === 1) s.nextTurnApPenalty += 1;

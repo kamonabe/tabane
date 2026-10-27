@@ -989,6 +989,19 @@ button {
 .grade-bad .grade-mark { color: var(--warn); }
 
 .numbers { max-width: 720px; margin: 0 auto; }
+.cost-mark { font-size: 1.2rem; margin-left: 4px; }
+.over-budget {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--warn);
+  color: #fff;
+  font-size: 0.85rem;
+}
+.cost-breakdown { max-width: 720px; margin: 12px auto 0; }
+.cost-breakdown h2 { font-size: 1rem; margin-bottom: 8px; }
+.cost-breakdown .note { margin-top: 8px; }
 
 /* ---------- 振り返り ---------- */
 .review {

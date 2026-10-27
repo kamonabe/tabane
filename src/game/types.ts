@@ -144,8 +144,14 @@ export interface GameState {
   budget: number;
   initialBudget: number;
   budgetAdded: number;
+  approvedBudget: number; // 使ってよい予算。はじめは initialBudget。増員の費用で増え、予算の見直しで減る
+  fundedStaff: number; // 増員で足された費用の合計
+  budgetCutAmount: number; // 予算の見直しで減った額
+  unplannedCost: number; // 延長したターンの外注費（予定外の出費）
+  replanned: boolean; // リリース判定より前の延長で、計画を変えた
   spent: number;
   overBudget: boolean;
+  overBudgetTurn: number | null;
   // 関係者
   trust: Trust;
   turnsSinceOpsSync: number;

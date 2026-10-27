@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyEscalation, approvalScore, escalate, hireAffordability, outcomeOf } from "./escalation";
+import { applyEscalation, approvalScore, escalate, outcomeOf } from "./escalation";
+import { hireCandidate } from "./vendor";
 import { baseState, fixedRng, member } from "./testUtils";
 import type { EscalationSource, EscalationStyle, EscalationType, GameState } from "./types";
 
@@ -8,17 +9,17 @@ const score = (s: GameState, type: EscalationType = "addStaff", style: Escalatio
 const s5 = () => baseState({ turn: 5, doneWork: 0 }); // behind = 0.125（裏付けあり +10）
 
 describe("approvalScore", () => {
-  it("基本: 信頼 + 裏付け", () => {
-    expect(score(s5())).toBe(70);
+  it("基本: 信頼 + 裏付け（人を増やす相談は「人とお金の両方」で −5）", () => {
+    expect(score(s5())).toBe(65);
   });
   it("準備 +15 / 根回し +15（今のターン・前のターン）", () => {
-    expect(score(s5(), "addStaff", "prepared")).toBe(85);
-    expect(score({ ...s5(), plan: [{ kind: "nemawashi" }] })).toBe(85);
-    expect(score({ ...s5(), lastTurnNemawashi: true })).toBe(85);
+    expect(score(s5(), "addStaff", "prepared")).toBe(80);
+    expect(score({ ...s5(), plan: [{ kind: "nemawashi" }] })).toBe(80);
+    expect(score({ ...s5(), lastTurnNemawashi: true })).toBe(80);
   });
   it("時期: ターン2以下 +15 / 7以降 −10", () => {
-    expect(score({ ...s5(), turn: 2 })).toBe(75); // 裏付けはターン5以降だけ
-    expect(score({ ...s5(), turn: 7 })).toBe(60);
+    expect(score({ ...s5(), turn: 2 })).toBe(70); // 裏付けはターン5以降だけ
+    expect(score({ ...s5(), turn: 7 })).toBe(55);
   });
   it("種類ごとの補正と締切の固さ", () => {
     expect(score(s5(), "addBudget")).toBe(60);
@@ -27,21 +28,20 @@ describe("approvalScore", () => {
     const firm = s5();
     firm.profile.deadlineFirm = true;
     expect(score(firm, "extendSchedule")).toBe(45);
-    expect(score({ ...s5(), budget: 500 })).toBe(55); // 余裕はないが期間限定ならなんとか（−15）
-    expect(score({ ...s5(), budget: 100 })).toBe(20); // 払えない（−50）
+    expect(score({ ...s5(), budget: 100 })).toBe(65); // 予算の見通しは通りやすさに関係しない
   });
   it("裏付け: 順調と言っていたのに遅れていないと −10", () => {
-    expect(score({ ...s5(), doneWork: 50 })).toBe(50);
+    expect(score({ ...s5(), doneWork: 50 })).toBe(45);
     expect(score({ ...s5(), doneWork: 50 }, "cutScope")).toBe(65);
   });
   it("回数ペナルティ・ごまかしペナルティ", () => {
-    expect(score({ ...s5(), escalationCount: 2 })).toBe(50);
-    expect(score({ ...s5(), glossDebt: 1 })).toBe(55);
+    expect(score({ ...s5(), escalationCount: 2 })).toBe(45);
+    expect(score({ ...s5(), glossDebt: 1 })).toBe(50);
     expect(score({ ...s5(), glossDebt: 1 }, "cutScope")).toBe(65);
   });
   it("リカバリ案 +15、再見積もり +20（回数ペナルティなし）、ステコミ起点は準備扱い", () => {
-    expect(score(s5(), "addStaff", "quick", "recovery")).toBe(70 + 15 + 15);
-    expect(score({ ...s5(), escalationCount: 3 }, "addStaff", "quick", "reestimate")).toBe(70 + 15 + 20);
+    expect(score(s5(), "addStaff", "quick", "recovery")).toBe(65 + 15 + 15);
+    expect(score({ ...s5(), escalationCount: 3 }, "addStaff", "quick", "reestimate")).toBe(65 + 15 + 20);
   });
   it("目安ラベル", () => {
     expect(approvalScore(s5(), "addStaff", "prepared", "turn").guide).toBe("good");
@@ -78,21 +78,40 @@ describe("結果", () => {
     const s = escalate(s5(), "addStaff", "prepared", fixedRng(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5));
     expect(s.pending?.kind).toBe("vendor");
   });
-  it("予算が払えない人増やしは通らない。きびしいときは満額でも期間限定", () => {
-    const rich = hireAffordability({ ...s5(), turn: 5, deadline: 12, budget: 1000 });
-    expect(rich).toBe("ok");
-    expect(hireAffordability({ ...s5(), budget: 500 })).toBe("tight"); // 残り7ターン × 65 = 455 は払えるが 700 は無理
-    expect(hireAffordability({ ...s5(), budget: 100 })).toBe("none");
-    // 今いる外注さんの分は先に引かれる
-    const withC = { ...s5(), budget: 800, members: [member("c", { employment: "contractor", ratePerTurn: 100 })] };
-    expect(hireAffordability(withC)).toBe("none");
-    const full = escalate({ ...s5(), budget: 500 }, "addStaff", "prepared", fixedRng(0.99, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5));
-    expect(full.escalations[0].outcome).toBe("conditional");
-    expect(full.pending).toMatchObject({ kind: "vendor", conditional: true });
-    const none = escalate({ ...s5(), budget: 100 }, "addStaff", "prepared", fixedRng(0.99));
-    expect(none.escalations[0].outcome).toBe("rejected");
-    expect(none.pending).toBeNull();
-    expect(none.lastResult).toContain("予算");
+  it("予算が少なくても、増員が予算を理由に却下・期間限定にならない", () => {
+    const low = { ...s5(), budget: 100 };
+    expect(score(low)).toBe(score(s5()));
+    const a = escalate(low, "addStaff", "prepared", fixedRng(0.99));
+    expect(a.escalations[0].outcome).toBe("approved");
+    expect(a.pending).toMatchObject({ kind: "vendor", conditional: false });
+  });
+  it("増員を採用すると、その人の費用が budget と approvedBudget に足される", () => {
+    const base = { ...s5(), turn: 4, deadline: 12 };
+    const hire = (conditional: boolean, index: number) => {
+      // 得点 55（ターン4）。準備して 0.99 なら承認、さっと口頭で 0.5 なら条件付き
+      const s = conditional ? escalate(base, "addStaff", "quick", fixedRng(0.5)) : escalate(base, "addStaff", "prepared", fixedRng(0.99));
+      return hireCandidate(s, index);
+    };
+    const full = hire(false, 1); // 中堅 110 × 残り 8 ターン
+    expect([full.budget, full.approvedBudget, full.fundedStaff]).toEqual([1880, 1880, 880]);
+    expect(full.members[full.members.length - 1].rampTurns).toBe(2);
+    expect(full.nextTurnApPenalty).toBe(1);
+    const cond = hire(true, 2); // 若手 80 × min(3, 8)
+    expect([cond.budget, cond.approvedBudget]).toEqual([1240, 1240]);
+    const late = escalate({ ...base, turn: 11 }, "addStaff", "quick", fixedRng(0.5));
+    expect(hireCandidate(late, 1).budget).toBe(1000 + 110); // min(3, 1)
+  });
+  it("リリース判定より前の延長は計画変更。外注費は budget にだけ足される", () => {
+    const c = member("c", { employment: "contractor", ratePerTurn: 100 });
+    const s = { ...s5(), deadline: 12, committedDeadline: 12, members: [...s5().members, c] };
+    const a = structuredClone(s);
+    applyEscalation(a, "extendSchedule", "approved", fixedRng(0), "turn");
+    expect([a.deadline, a.committedDeadline, a.replanned, a.trust.ops]).toEqual([14, 14, true, 57]);
+    expect([a.budget, a.approvedBudget, a.unplannedCost]).toEqual([1200, 1000, 200]);
+    const r = structuredClone(s);
+    applyEscalation(r, "extendSchedule", "approved", fixedRng(0), "release");
+    expect([r.deadline, r.committedDeadline, r.replanned, r.trust.ops]).toEqual([14, 12, false, 60]);
+    expect([r.budget, r.approvedBudget]).toEqual([1200, 1000]);
   });
   it("範囲を減らしても reportedDone は下回らない。承認 −15%、条件付き −8%", () => {
     const s = { ...s5(), totalWork: 100, originalTotalWork: 100, doneWork: 90 };

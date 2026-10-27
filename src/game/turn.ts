@@ -173,6 +173,7 @@ export function resolveTurn(state: GameState): GameState {
     for (const m of contractors(s)) m.left = true;
     setTrust(s, "steering", OVER_BUDGET_TRUST);
     s.overBudget = true;
+    s.overBudgetTurn = s.turn;
     addLog(s, "overBudget", "予算が尽きて、外注のみなさんの契約が止まった");
   }
 

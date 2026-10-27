@@ -2,7 +2,7 @@
 import {
   AUTO_RELEASE_RATIO, DEBT_QUALITY_PENALTY, DEFER_OPS_BASE, DEFER_OPS_PER_RATIO, GLOSS_PENALTY,
   GLOSS_REVEAL_RELEASE_RATIO, GRADE_COST, GRADE_DELIVERY, GRADE_QUALITY, GRADE_SCOPE, GRADE_STAKEHOLDERS, GRADE_TEAM,
-  HONESTY_BONUS, INCIDENT_BASE, INCIDENT_MAX, INCIDENT_MIN, INCIDENT_OPS, INCIDENT_OPS_MULT, INCIDENT_STEERING,
+  HONESTY_BONUS, INCIDENT_BASE, INCIDENT_DIV, INCIDENT_MAX, INCIDENT_MIN, INCIDENT_OPS, INCIDENT_OPS_MULT, INCIDENT_STEERING,
   BURNOUT_FATIGUE, INCOMPLETE_QUALITY_PENALTY, MAX_DEADLINE,
 } from "./balance";
 import { addLog, avg, clamp, rosterMembers, setTrust } from "./derived";
@@ -79,7 +79,7 @@ export function finalQualityOf(s: GameState, incompleteRatio: number): number {
 }
 
 export function incidentChance(finalQuality: number, opsImpact: 1 | 2 | 3): number {
-  return clamp(((INCIDENT_BASE - finalQuality) / 100) * INCIDENT_OPS_MULT[opsImpact], INCIDENT_MIN, INCIDENT_MAX);
+  return clamp(((INCIDENT_BASE - finalQuality) / INCIDENT_DIV) * INCIDENT_OPS_MULT[opsImpact], INCIDENT_MIN, INCIDENT_MAX);
 }
 
 export function teamScore(s: GameState): number {
@@ -92,10 +92,13 @@ export function evaluate(
   s: GameState, o: { canceled: boolean; releaseTurn: number; incident: boolean; finalQuality: number },
 ): Outcome["grades"] {
   const q = gradeUp(o.finalQuality, GRADE_QUALITY);
+  // 計画を変えたゲームでは、納期は最高でも ○
+  const onTime = gradeDown(o.releaseTurn - s.committedDeadline, GRADE_DELIVERY);
+  const delivery = s.replanned && onTime === "great" ? "good" : onTime;
   return {
     quality: o.incident ? lower(q) : q,
-    cost: s.overBudget ? "bad" : gradeDown(s.spent / Math.max(1, s.initialBudget), GRADE_COST),
-    delivery: o.canceled ? "bad" : gradeDown(o.releaseTurn - s.committedDeadline, GRADE_DELIVERY),
+    cost: s.overBudget ? "bad" : gradeDown(s.spent / Math.max(1, s.approvedBudget), GRADE_COST),
+    delivery: o.canceled ? "bad" : delivery,
     scope: o.canceled ? "bad" : gradeUp(Math.min(1, s.doneWork / Math.max(1, s.originalTotalWork)), GRADE_SCOPE),
     stakeholders: gradeUp((s.trust.steering + s.trust.ops) / 2, GRADE_STAKEHOLDERS),
     team: gradeUp(teamScore(s), GRADE_TEAM),
